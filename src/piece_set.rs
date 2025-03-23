@@ -1,4 +1,4 @@
-use crate::constants::{BISHOP, KING, KNIGHT, NONE, PAWN, QUEEN, ROOK};
+use crate::constants::*;
 
 pub struct PieceSet {
     pawns: u64,
@@ -6,16 +6,19 @@ pub struct PieceSet {
     diagonals: u64,
     knights: u64,
     king: u64,
+
+    color: u8,
 }
 
 impl PieceSet {
-    pub fn new() -> Self {
+    pub fn new(color: u8) -> Self {
         PieceSet {
             pawns: 0,
             orthogonals: 0,
             diagonals: 0,
             knights: 0,
             king: 0,
+            color,
         }
     }
 
@@ -27,7 +30,7 @@ impl PieceSet {
         self.diagonals & self.orthogonals
     }
 
-    pub fn get_piece_at(&self, field: i32) -> u8 {
+    pub fn get_piece_at(&self, field: u16) -> u8 {
         let pointer: u64 = 1 << field;
         if pointer & self.pawns != 0 {
             return PAWN;
@@ -52,10 +55,58 @@ impl PieceSet {
         NONE
     }
 
-    pub fn move_piece(&mut self, start: i32, target: i32) {
+    pub fn make_queenside_castle(&mut self) {
+        if self.color == WHITE {
+            self.king = 0b100;
+            self.orthogonals &= !1;
+            self.orthogonals |= 0b1000;
+        } else {
+            self.king = 0x400000000000000;
+            self.orthogonals &= !0x100000000000000;
+            self.orthogonals |= 0x800000000000000;
+        }
+    }
+
+    pub fn unmake_queenside_castle(&mut self) {
+        if self.color == WHITE {
+            self.king = 0x10;
+            self.orthogonals &= !0b1000;
+            self.orthogonals |= 1;
+        } else {
+            self.king = 0x1000000000000000;
+            self.orthogonals &= !0x800000000000000;
+            self.orthogonals |= 0x100000000000000;
+        }
+    }
+
+    pub fn make_kingside_castle(&mut self) {
+        if self.color == WHITE {
+            self.king = 0x40;
+            self.orthogonals &= !0x80;
+            self.orthogonals |= 0x20;
+        } else {
+            self.king = 0x4000000000000000;
+            self.orthogonals &= !0x8000000000000000;
+            self.orthogonals |= 0x2000000000000000;
+        }
+    }
+
+    pub fn unmake_kingside_castle(&mut self) {
+        if self.color == WHITE {
+            self.king = 0x10;
+            self.orthogonals &= !0x20;
+            self.orthogonals |= 0x80;
+        } else {
+            self.king = 0x1000000000000000;
+            self.orthogonals &= !0x2000000000000000;
+            self.orthogonals |= 0x8000000000000000;
+        }
+    }
+
+    pub fn move_piece(&mut self, start: u16, target: u16) {
         let start_mask: u64 = 1 << start;
         let target_mask: u64 = 1 << target;
-        if start_mask | self.pawns != 0 {
+        if start_mask & self.pawns != 0 {
             self.pawns &= !start_mask;
             self.pawns |= target_mask;
             return;
@@ -72,15 +123,15 @@ impl PieceSet {
         }
         if start_mask & self.knights != 0 {
             self.knights &= !start_mask;
-            self.knights |= start_mask;
+            self.knights |= target_mask;
             return;
         }
-        if start_mask | self.king != 0 {
+        if start_mask & self.king != 0 {
             self.king = target_mask;
         }
     }
 
-    pub fn take(&mut self, field: i32) {
+    pub fn take(&mut self, field: u16) {
         let mask: u64 = !(1 << field);
         self.pawns &= mask;
         self.diagonals &= mask;
@@ -88,7 +139,7 @@ impl PieceSet {
         self.knights &= mask;
     }
 
-    pub fn add_piece(&mut self, field: i32, piece_type: u8) {
+    pub fn add_piece(&mut self, field: u16, piece_type: u8) {
         let mask: u64 = 1 << field;
         match piece_type {
             PAWN => self.pawns |= mask,
@@ -142,5 +193,9 @@ impl PieceSet {
 
     pub fn set_king(&mut self, king: u64) {
         self.king = king;
+    }
+
+    pub fn get_color(&self) -> u8 {
+        self.color
     }
 }

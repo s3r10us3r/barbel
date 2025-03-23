@@ -1,13 +1,13 @@
 pub const NONE: u8 = 0;
 pub const PAWN: u8 = 1;
-pub const BISHOP: u8 = 2;
-pub const KNIGHT: u8 = 3;
+pub const KNIGHT: u8 = 2;
+pub const BISHOP: u8 = 3;
 pub const ROOK: u8 = 4;
 pub const QUEEN: u8 = 5;
 pub const KING: u8 = 6;
 
-pub const WHITE: u8 = 0;
-pub const BLACK: u8 = 1;
+pub const WHITE: u8 = 1;
+pub const BLACK: u8 = 0;
 
 pub const VERTICAL_SHIFT: u8 = 8;
 pub const HORIZONTAL_SHIFT: u8 = 1;

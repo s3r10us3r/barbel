@@ -1,9 +1,5 @@
-use crate::board::{
-    Board, BLACK_KINGSIDE_CASTLE_MASK, BLACK_QUEENSIDE_CASTLE_MASK, WHITE_CASTLING_RIGHTS_MASK,
-    WHITE_KINGSIDE_CASTLE_MASK, WHITE_QUEENSIDE_CASTLE_MASK,
-};
-use crate::constants::{BISHOP, BLACK, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE};
-use crate::piece_set;
+use crate::board::Board;
+use crate::constants::*;
 
 #[derive(Debug, PartialEq)]
 pub enum FenError {
@@ -58,7 +54,7 @@ fn parse_pieces(mut board: Board, piece_str: &str) -> Result<Board, FenError> {
                 let piece_type = fen_chr_to_piece_type(ch.to_ascii_lowercase())
                     .ok_or(FenError::InvalidCharacter { ch, position: pos })?;
                 let field: usize = (7 - i) * 8 + file;
-                piece_set.add_piece(field as i32, piece_type);
+                piece_set.add_piece(field as u16, piece_type);
                 file += 1;
             }
             pos += 1;
@@ -87,8 +83,8 @@ fn fen_chr_to_piece_type(ch: char) -> Option<u8> {
 
 fn parse_side_to_move(mut board: Board, side_to_move: &str) -> Result<Board, FenError> {
     match side_to_move {
-        "w" => board.set_side_to_move(WHITE),
-        "b" => board.set_side_to_move(BLACK),
+        "w" => board.get_mut_state().set_side_to_move(WHITE),
+        "b" => board.get_mut_state().set_side_to_move(BLACK),
         _ => {
             return Err(FenError::InvalidStructure {
                 reason: format!(
@@ -112,19 +108,19 @@ fn parse_en_passant_file(mut board: Board, en_passant_field: &str) -> Result<Boa
         }
         let chars: Vec<char> = en_passant_field.chars().collect();
         let file = match chars[0] {
-            'a' => Ok(0),
-            'b' => Ok(1),
-            'c' => Ok(2),
-            'd' => Ok(3),
-            'e' => Ok(4),
-            'f' => Ok(5),
-            'g' => Ok(6),
-            'h' => Ok(7),
+            'a' => Ok(1),
+            'b' => Ok(2),
+            'c' => Ok(3),
+            'd' => Ok(4),
+            'e' => Ok(5),
+            'f' => Ok(6),
+            'g' => Ok(7),
+            'h' => Ok(8),
             _ => Err(FenError::InvalidStructure {
                 reason: format!("Invalid en-passant structure: {}", en_passant_field),
             }),
         }?;
-        board.set_en_passant_file(file);
+        board.get_mut_state().set_en_passant_file(file);
         Ok(board)
     }
 }
@@ -133,12 +129,13 @@ fn parse_castling_rights(mut board: Board, castling_rights: &str) -> Result<Boar
     if castling_rights == "-" {
         Ok(board)
     } else {
+        let state = board.get_mut_state();
         for ch in castling_rights.chars() {
             match ch {
-                'K' => board.set_state_bits(WHITE_KINGSIDE_CASTLE_MASK),
-                'k' => board.set_state_bits(BLACK_KINGSIDE_CASTLE_MASK),
-                'Q' => board.set_state_bits(WHITE_QUEENSIDE_CASTLE_MASK),
-                'q' => board.set_state_bits(BLACK_QUEENSIDE_CASTLE_MASK),
+                'K' => state.set_castling_rights_for(WHITE, KING),
+                'k' => state.set_castling_rights_for(BLACK, KING),
+                'Q' => state.set_castling_rights_for(WHITE, QUEEN),
+                'q' => state.set_castling_rights_for(BLACK, QUEEN),
                 _ => {
                     return Err(FenError::InvalidStructure {
                         reason: format!("Invalid castling rights character: {}", ch),
@@ -159,7 +156,7 @@ fn parse_half_move_clock(mut board: Board, half_move_str: &str) -> Result<Board,
             })
         }
     };
-    board.set_halfmove_clock(half_moves);
+    board.get_mut_state().set_halfmove_clock(half_moves);
     Ok(board)
 }
 
@@ -172,7 +169,7 @@ fn parse_move_clock(mut board: Board, move_str: &str) -> Result<Board, FenError>
             })
         }
     };
-    board.set_move_clock(moves);
+    board.get_mut_state().set_move_clock(moves);
     Ok(board)
 }
 
@@ -208,16 +205,17 @@ fn should_correctly_parse_starting_fen() {
     assert_eq!(black_pieces.get_queens(), 0x800000000000000, "black queens");
     assert_eq!(black_pieces.get_king(), 0x1000000000000000, "black king");
 
-    assert_eq!(board.get_side_to_move(), WHITE, "side to move");
-    assert_eq!(board.get_castling_rights(), 0xf, "castling rights");
-    assert_eq!(board.get_en_passant_file(), 0, "en passant");
-    assert_eq!(board.get_halfmove_clock(), 0, "halfmove clock");
-    assert_eq!(board.get_move_clock(), 1, "move clock");
+    let state = board.get_state();
+    assert_eq!(state.get_side_to_move(), WHITE, "side to move");
+    assert_eq!(state.get_castling_rights(), 0xf, "castling rights");
+    assert_eq!(state.get_en_passant_file(), 0, "en passant");
+    assert_eq!(state.get_halfmove_clock(), 0, "halfmove clock");
+    assert_eq!(state.get_move_clock(), 1, "move clock");
 }
 
 #[test]
 fn should_correctly_parse_fen_after_e4() {
-    let fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 2";
+    let fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
     let mut board = parse_fen(fen).unwrap();
     let white_pieces = board.get_white_player();
     assert_eq!(white_pieces.get_pawns(), 0x1000ef00, "white pawns");
@@ -247,11 +245,12 @@ fn should_correctly_parse_fen_after_e4() {
     assert_eq!(black_pieces.get_queens(), 0x800000000000000, "black queens");
     assert_eq!(black_pieces.get_king(), 0x1000000000000000, "black king");
 
-    assert_eq!(board.get_side_to_move(), BLACK, "side to move");
-    assert_eq!(board.get_castling_rights(), 0xf, "castling rights");
-    assert_eq!(board.get_en_passant_file(), 5, "en passant");
-    assert_eq!(board.get_halfmove_clock(), 0, "halfmove clock");
-    assert_eq!(board.get_move_clock(), 2, "move clock");
+    let state = board.get_state();
+    assert_eq!(state.get_side_to_move(), BLACK, "side to move");
+    assert_eq!(state.get_castling_rights(), 0xf, "castling rights");
+    assert_eq!(state.get_en_passant_file(), 5, "en passant");
+    assert_eq!(state.get_halfmove_clock(), 0, "halfmove clock");
+    assert_eq!(state.get_move_clock(), 1, "move clock");
 }
 
 #[test]
@@ -282,11 +281,13 @@ fn should_correctly_parse_fen_in_middlegame() {
     assert_eq!(black_pieces.get_queens(), 0x800000000000000, "black queens");
     assert_eq!(black_pieces.get_king(), 0x4000000000000000, "black king");
 
-    assert_eq!(board.get_side_to_move(), WHITE, "side to move");
-    assert_eq!(board.get_castling_rights(), 0, "castling rights");
-    assert_eq!(board.get_en_passant_file(), 5, "en passant");
-    assert_eq!(board.get_halfmove_clock(), 4, "halfmove clock");
-    assert_eq!(board.get_move_clock(), 9, "move clock");
+    let state = board.get_state();
+
+    assert_eq!(state.get_side_to_move(), WHITE, "side to move");
+    assert_eq!(state.get_castling_rights(), 0, "castling rights");
+    assert_eq!(state.get_en_passant_file(), 5, "en passant");
+    assert_eq!(state.get_halfmove_clock(), 4, "halfmove clock");
+    assert_eq!(state.get_move_clock(), 9, "move clock");
 }
 
 #[test]
@@ -321,11 +322,12 @@ fn should_correctly_parse_fen_in_middlegame2() {
     assert_eq!(black_pieces.get_queens(), 0x800000000000000, "black queens");
     assert_eq!(black_pieces.get_king(), 0x2000000000000000, "black king");
 
-    assert_eq!(board.get_side_to_move(), WHITE, "side to move");
-    assert_eq!(board.get_castling_rights(), 0xc, "castling rights");
-    assert_eq!(board.get_en_passant_file(), 0, "en passant");
-    assert_eq!(board.get_halfmove_clock(), 1, "halfmove clock");
-    assert_eq!(board.get_move_clock(), 8, "move clock");
+    let state = board.get_state();
+    assert_eq!(state.get_side_to_move(), WHITE, "side to move");
+    assert_eq!(state.get_castling_rights(), 0xc, "castling rights");
+    assert_eq!(state.get_en_passant_file(), 0, "en passant");
+    assert_eq!(state.get_halfmove_clock(), 1, "halfmove clock");
+    assert_eq!(state.get_move_clock(), 8, "move clock");
 }
 
 #[test]
@@ -353,7 +355,7 @@ fn should_err_when_fen_has_too_little_fields_in_a_rank() {
 }
 
 #[test]
-fn should_throw_when_the_side_to_move_is_incalid() {
+fn should_throw_when_the_side_to_move_is_invalid() {
     let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR x KQkq - 0 1";
     assert!(parse_fen(fen).is_err());
 }
