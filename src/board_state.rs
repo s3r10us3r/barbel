@@ -1,4 +1,4 @@
-use crate::constants::{BLACK, KING, QUEEN, WHITE};
+use crate::constants::{BLACK, KING, KINGSIDE_CASTLE_MASK, QUEEN, WHITE};
 
 #[derive(Clone)]
 pub struct BoardState {
@@ -11,11 +11,11 @@ impl BoardState {
     }
 
     pub fn can_castle_kingside(&self, color: usize) -> bool {
-        self.value & (BLACK_KINGSIDE_CASTLE_MASK << (color * 2)) != 0
+        self.value & KINGSIDE_CASTLE_MASKS[color] != 0
     }
 
     pub fn can_castle_queenside(&self, color: usize) -> bool {
-        (self.value & (BLACK_QUEENSIDE_CASTLE_MASK) << (color * 2)) != 0
+        self.value & QUEENSIDE_CASTLE_MASKS[color] != 0
     }
 
     pub fn set_castling_rights(&mut self, castling_rights: u32) {
@@ -27,27 +27,15 @@ impl BoardState {
     }
 
     pub fn disable_all_castling_rights(&mut self, color: usize) {
-        if color == WHITE {
-            self.value &= !WHITE_CASTLING_RIGHTS_MASK;
-        } else {
-            self.value &= !BLACK_CASTLING_RIGHTS_MASK;
-        }
+        self.value &= !CASTLE_MASKS[color];
     }
 
     pub fn disable_kingside_castling_rights(&mut self, color: usize) {
-        if color == WHITE {
-            self.value &= !WHITE_KINGSIDE_CASTLE_MASK;
-        } else {
-            self.value &= !BLACK_KINGSIDE_CASTLE_MASK;
-        }
+        self.value &= !KINGSIDE_CASTLE_MASKS[color];
     }
 
     pub fn disable_queenside_castling_rights(&mut self, color: usize) {
-        if color == WHITE {
-            self.value &= !WHITE_QUEENSIDE_CASTLE_MASK;
-        } else {
-            self.value &= !BLACK_QUEENSIDE_CASTLE_MASK;
-        }
+        self.value &= !QUEENSIDE_CASTLE_MASKS[color];
     }
 
     pub fn set_castling_rights_for(&mut self, color: usize, side: u8) {
@@ -112,6 +100,9 @@ impl BoardState {
 
 const SIDE_TO_MOVE_MASK: u32 = 1;
 
+const QUEENSIDE_CASTLE_MASKS: [u32; 2] = [BLACK_QUEENSIDE_CASTLE_MASK, WHITE_QUEENSIDE_CASTLE_MASK];
+const KINGSIDE_CASTLE_MASKS: [u32; 2] = [BLACK_KINGSIDE_CASTLE_MASK, WHITE_KINGSIDE_CASTLE_MASK];
+const CASTLE_MASKS: [u32; 2] = [BLACK_CASTLING_RIGHTS_MASK, WHITE_CASTLING_RIGHTS_MASK];
 const BLACK_KINGSIDE_CASTLE_MASK: u32 = 0b10;
 const BLACK_QUEENSIDE_CASTLE_MASK: u32 = 0b100;
 const WHITE_KINGSIDE_CASTLE_MASK: u32 = 0b1000;

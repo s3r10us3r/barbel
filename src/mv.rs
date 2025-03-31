@@ -1,4 +1,4 @@
-use std::clone;
+use std::{clone, fmt::format};
 
 use crate::{board::Board, constants::*, piece_set::PieceSet};
 
@@ -103,7 +103,19 @@ impl Move {
     pub fn to_str(&self) -> String {
         let start_str = field_to_str(self.get_start_field());
         let target_str = field_to_str(self.get_target_field());
-        format!("{}{}", start_str, target_str)
+        let rs = format!("{}{}", start_str, target_str);
+        if self.is_promotion() {
+            let pp_str = match self.get_promotion_piece() {
+                KNIGHT => "n",
+                QUEEN => "q",
+                ROOK => "r",
+                BISHOP => "b",
+                _ => panic!("INVALID PROMOTION PIECE"),
+            };
+            format!("{}{}", rs, pp_str)
+        } else {
+            rs
+        }
     }
 }
 

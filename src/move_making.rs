@@ -33,11 +33,11 @@ impl Board {
         if moving_piece == KING {
             new_state.disable_all_castling_rights(self.us);
         }
-        if start == 1 || target == 1 {
+        if start == 0 || target == 0 {
             new_state.disable_queenside_castling_rights(WHITE);
         } else if start == 7 || target == 7 {
             new_state.disable_kingside_castling_rights(WHITE);
-        } else if start == 57 || target == 57 {
+        } else if start == 56 || target == 56 {
             new_state.disable_queenside_castling_rights(BLACK);
         } else if start == 63 || target == 63 {
             new_state.disable_kingside_castling_rights(BLACK);

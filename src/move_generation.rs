@@ -68,13 +68,14 @@ fn gen_checked(move_list: &mut MoveList, board: &Board, checker: u64) {
             } else {
                 mv.get_target_bb() << 8
             };
-            if cap_bb & target_mask == 0 {
+            if target_mask & !cap_bb != 0 {
                 move_list.remove(i);
             }
         } else if mv.get_target_bb() & target_mask == 0 {
             move_list.remove(i);
         }
     }
+    filter_illegal_moves(move_list, board);
 }
 
 fn gen_legal_moves(move_list: &mut MoveList, board: &Board) {
