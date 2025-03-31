@@ -6,8 +6,8 @@ pub const ROOK: u8 = 4;
 pub const QUEEN: u8 = 5;
 pub const KING: u8 = 6;
 
-pub const WHITE: u8 = 1;
-pub const BLACK: u8 = 0;
+pub const WHITE: usize = 1;
+pub const BLACK: usize = 0;
 
 pub const VERTICAL_SHIFT: u8 = 8;
 pub const HORIZONTAL_SHIFT: u8 = 1;
@@ -29,3 +29,6 @@ pub const FILEE: u64 = FILED << HORIZONTAL_SHIFT;
 pub const FILEF: u64 = FILEE << HORIZONTAL_SHIFT;
 pub const FILEG: u64 = FILEF << HORIZONTAL_SHIFT;
 pub const FILEH: u64 = FILEG << HORIZONTAL_SHIFT;
+
+pub const KINGSIDE_CASTLE_MASK: u64 = 0x60;
+pub const QUEENSIDE_CATLE_MASK: u64 = 0xE;

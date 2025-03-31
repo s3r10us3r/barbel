@@ -7,11 +7,11 @@ pub struct PieceSet {
     knights: u64,
     king: u64,
 
-    color: u8,
+    color: usize,
 }
 
 impl PieceSet {
-    pub fn new(color: u8) -> Self {
+    pub fn new(color: usize) -> Self {
         PieceSet {
             pawns: 0,
             orthogonals: 0,
@@ -195,7 +195,7 @@ impl PieceSet {
         self.king = king;
     }
 
-    pub fn get_color(&self) -> u8 {
+    pub fn get_color(&self) -> usize {
         self.color
     }
 }

@@ -1,13 +1,13 @@
 use crate::{
     board_state::BoardState,
     constants::{BLACK, WHITE},
-    mv::Move,
     piece_set::PieceSet,
 };
 
 pub struct Board {
-    pub white_player: PieceSet,
-    pub black_player: PieceSet,
+    pub players: [PieceSet; 2],
+    pub us: usize,
+    pub enemy: usize,
     board_state: BoardState,
     state_stack: Vec<BoardState>,
 }
@@ -15,8 +15,9 @@ pub struct Board {
 impl Board {
     pub fn new() -> Board {
         Board {
-            white_player: PieceSet::new(WHITE),
-            black_player: PieceSet::new(BLACK),
+            players: [PieceSet::new(BLACK), PieceSet::new(WHITE)],
+            us: WHITE,
+            enemy: BLACK,
             board_state: BoardState::new(),
             state_stack: vec![],
         }
@@ -24,14 +25,6 @@ impl Board {
 
     pub fn set_state(&mut self, new_state: BoardState) {
         self.board_state = new_state;
-    }
-
-    pub fn get_white_player(&mut self) -> &mut PieceSet {
-        &mut self.white_player
-    }
-
-    pub fn get_black_player(&mut self) -> &mut PieceSet {
-        &mut self.black_player
     }
 
     pub fn get_state(&self) -> BoardState {
@@ -51,5 +44,17 @@ impl Board {
         let mut state = self.state_stack.pop().unwrap();
         std::mem::swap(&mut self.board_state, &mut state);
         state
+    }
+
+    pub fn set_size_to_move(&mut self, color: usize) {
+        self.us = color;
+    }
+
+    pub fn get_pieces(&self, color: usize) -> &PieceSet {
+        &self.players[color]
+    }
+
+    pub fn get_occupancy(&self) -> u64 {
+        self.players[WHITE].get_all() | self.players[BLACK].get_all()
     }
 }

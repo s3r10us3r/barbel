@@ -1,0 +1,146 @@
+use crate::attack_maps::AttackMap;
+use crate::board::Board;
+use crate::constants::*;
+use crate::lookups::{KNIGHT_LOOKUP, RAY_LOOKUP};
+use crate::mv::Move;
+
+pub struct MoveList {
+    moves: Vec<Move>,
+}
+
+fn gen_moves(move_list: &mut MoveList, board: &Board, attack_map: &AttackMap) {
+    move_list.reset();
+    let (playing, staying) = board.get_moving_staying_player();
+}
+
+impl MoveList {
+    pub fn new() -> Self {
+        MoveList { moves: Vec::new() }
+    }
+
+    fn push_move(&mut self, mv: Move) {
+        self.moves.push(mv);
+    }
+
+    fn reset(&mut self) {
+        self.moves.clear();
+    }
+
+    fn gen_pawn_moves(&mut self, mut pawns: u64, enemy_mask: &u64, occupancy: &u64, color: u8) {
+        while pawns != 0 {
+            let start = pawns.trailing_zeros() as u16;
+            pawns &= pawns - 1;
+            let lsb_pointer = 1 << start;
+            //moves
+            let single_move_mask;
+            let double_move_mask;
+            let left_capture_mask;
+            let right_capture_mask;
+            let double_pawn_rank;
+            let promotion_rank;
+            if color == WHITE {
+                single_move_mask = (lsb_pointer << 8) & !occupancy;
+                double_move_mask = (lsb_pointer << 16) & !occupancy;
+                left_capture_mask = ((lsb_pointer & !FILEA) << 7) & enemy_mask;
+                right_capture_mask = ((lsb_pointer & !FILEH) << 9) & enemy_mask;
+                double_pawn_rank = 1;
+                promotion_rank = 7;
+            } else {
+                single_move_mask = (lsb_pointer >> 8) & occupancy;
+                double_move_mask = (lsb_pointer << 16) & occupancy;
+                left_capture_mask = ((lsb_pointer & !FILEA) >> 9) & enemy_mask;
+                right_capture_mask = ((lsb_pointer & !FILEH) >> 7) & enemy_mask;
+                double_pawn_rank = 6;
+                promotion_rank = 0;
+            }
+            if single_move_mask != 0 {
+                let target = single_move_mask.trailing_zeros() as u16;
+                if target / 8 == promotion_rank {
+                    gen_promotion_moves(&mut self, start, target);
+                } else {
+                    let mv = Move::new_quiet(start, target);
+                    self.push_move(mv);
+                }
+                if double_move_mask != 0 && start / 8 == double_pawn_rank {
+                    let target = double_move_mask.trailing_zeros() as u16;
+                    let mv = Move::new_double_pawn_push(start, target);
+                    self.push_move(mv);
+                }
+            }
+
+            if left_capture_mask != 0 {
+                let target = left_capture_mask.trailing_zeros() as u16;
+                if target / 8 == promotion_rank {
+                    gen_promotion_captures(&mut self, start, target);
+                } else {
+                    let mv = Move::new_capture(start, target);
+                    self.push_move(mv);
+                }
+            }
+            if right_capture_mask != 0 {
+                let target = right_capture_mask.trailing_zeros() as u16;
+                if target / 8 == promotion_rank {
+                    gen_promotion_captures(&mut self, start, target);
+                } else {
+                    let mv = Move::new_capture(start, target);
+                    self.push_move(mv);
+                }
+            }
+        }
+    }
+
+    fn gen_promotion_moves(&mut self, start: u16, target: u16) {
+        let pieces = [KNIGHT, BISHOP, ROOK, QUEEN];
+        for piece in pieces {
+            self.push_move(Move::new_promotion(start, target, piece));
+        }
+    }
+
+    fn gen_promotion_captures(&mut self, start: u16, target: u16) {
+        let pieces = [KNIGHT, BISHOP, ROOK, QUEEN];
+        for piece in pieces {
+            self.push_move(Move::new_promotion_capture(start, target, piece));
+        }
+    }
+
+    fn gen_knight_moves(&mut self, mut knights: u64, enemy_mask: &u64, ally_mask: &u64) {
+        while knights != 0 {
+            let start = knights.trailing_zeros() as usize;
+            let move_mask = KNIGHT_LOOKUP[start] & !ally_mask;
+            let mut quiet_mask = move_mask & !enemy_mask;
+            let mut capture_mask = move_mask & enemy_mask;
+            while quiet_mask != 0 {
+                let target = quiet_mask.trailing_zeros() as u16;
+                quiet_mask &= quiet_mask - 1;
+                self.push_move(Move::new_quiet(start as u16, target));
+            }
+            while capture_mask != 0 {
+                let target = capture_mask.trailing_zeros() as u16;
+                capture_mask &= capture_mask - 1;
+                self.moves.push(Move::new_capture(start as u16, target));
+            }
+            knights &= knights - 1;
+        }
+    }
+
+    fn gen_orthogonal_moves(&mut self, mut orthogonals: u64, enemy_mask: &u64, occupancy: &u64) {}
+
+    fn gen_positive_ray_moves(
+        &mut self,
+        start: usize,
+        enemy_mask: &u64,
+        occupancy: &u64,
+        dir8: usize,
+    ) {
+        let ray = RAY_LOOKUP[dir8][start];
+        let blocker = occupancy & ray;
+        let square = (blocker | 0x8000000000000000).trailing_zeros() as usize;
+        let attack_mask = ray ^ RAY_LOOKUP[dir8][square];
+        let quiet_mask = attack_mask & !occupancy;
+        let capture_mask = attack_mask & !occupancy;
+        while quiet_mask != 0 {
+            let target = quiet_mask.trailing_zeros();
+            self.push_move(Move::new_quiet(start as u16, target as u16));
+        }
+    }
+}

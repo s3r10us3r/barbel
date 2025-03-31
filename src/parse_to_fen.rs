@@ -14,8 +14,8 @@ impl Board {
     }
 
     fn parse_pieces(&self) -> String {
-        let white_piece_set = &self.white_player;
-        let black_piece_set = &self.black_player;
+        let white_piece_set = &self.players[WHITE];
+        let black_piece_set = &self.players[BLACK];
         let mut rank_strings: Vec<String> = vec![];
         for rank in (0..8).rev() {
             let mut piece_str = String::new();
@@ -55,8 +55,7 @@ impl Board {
     }
 
     fn parse_side_to_move(&self) -> String {
-        let side_to_move = self.get_state().get_side_to_move();
-        if side_to_move == WHITE {
+        if self.us == WHITE {
             "w".to_string()
         } else {
             "b".to_string()
@@ -93,8 +92,7 @@ impl Board {
         } else {
             let file = file - 1;
             let file_char = file_to_char(file).to_string();
-            let side_to_move = self.get_state().get_side_to_move();
-            if side_to_move == WHITE {
+            if self.us == WHITE {
                 file_char.to_string() + "6"
             } else {
                 file_char.to_string() + "3"

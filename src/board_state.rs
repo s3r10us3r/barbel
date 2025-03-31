@@ -10,23 +10,11 @@ impl BoardState {
         BoardState { value: 0 }
     }
 
-    pub fn get_side_to_move(&self) -> u8 {
-        (self.value & SIDE_TO_MOVE_MASK) as u8
-    }
-
-    pub fn set_side_to_move(&mut self, side_to_move: u8) {
-        self.value = (self.value & !SIDE_TO_MOVE_MASK) | (side_to_move as u32);
-    }
-
-    pub fn flip_side_to_move(&mut self) {
-        self.value ^= SIDE_TO_MOVE_MASK;
-    }
-
-    pub fn can_castle_kingside(&self, color: u8) -> bool {
+    pub fn can_castle_kingside(&self, color: usize) -> bool {
         self.value & (BLACK_KINGSIDE_CASTLE_MASK << (color * 2)) != 0
     }
 
-    pub fn can_castle_queenside(&self, color: u8) -> bool {
+    pub fn can_castle_queenside(&self, color: usize) -> bool {
         (self.value & (BLACK_QUEENSIDE_CASTLE_MASK) << (color * 2)) != 0
     }
 
@@ -38,7 +26,7 @@ impl BoardState {
         (self.value & CASTLING_RIGHTS_MASK) >> 1
     }
 
-    pub fn disable_all_castling_rights(&mut self, color: u8) {
+    pub fn disable_all_castling_rights(&mut self, color: usize) {
         if color == WHITE {
             self.value &= !WHITE_CASTLING_RIGHTS_MASK;
         } else {
@@ -46,7 +34,7 @@ impl BoardState {
         }
     }
 
-    pub fn disable_kingside_castling_rights(&mut self, color: u8) {
+    pub fn disable_kingside_castling_rights(&mut self, color: usize) {
         if color == WHITE {
             self.value &= !WHITE_KINGSIDE_CASTLE_MASK;
         } else {
@@ -54,7 +42,7 @@ impl BoardState {
         }
     }
 
-    pub fn disable_queenside_castling_rights(&mut self, color: u8) {
+    pub fn disable_queenside_castling_rights(&mut self, color: usize) {
         if color == WHITE {
             self.value &= !WHITE_QUEENSIDE_CASTLE_MASK;
         } else {
@@ -62,13 +50,13 @@ impl BoardState {
         }
     }
 
-    pub fn set_castling_rights_for(&mut self, color: u8, side: u8) {
+    pub fn set_castling_rights_for(&mut self, color: usize, side: u8) {
         let mask = match (color, side) {
             (WHITE, KING) => WHITE_KINGSIDE_CASTLE_MASK,
             (WHITE, QUEEN) => WHITE_QUEENSIDE_CASTLE_MASK,
             (BLACK, KING) => BLACK_KINGSIDE_CASTLE_MASK,
             (BLACK, QUEEN) => BLACK_QUEENSIDE_CASTLE_MASK,
-            _ => panic!("Incalid value supplied to set castling for"),
+            _ => panic!("Invalid value supplied to set castling for"),
         };
         self.value |= mask;
     }
