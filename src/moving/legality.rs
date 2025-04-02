@@ -1,6 +1,4 @@
-use crate::{
-    bitboard_helpers::get_lsb, board::Board, constants::WHITE, lookups::BB_BETWEEN, mv::Move,
-};
+use crate::{bitboard_helpers::get_lsb, board::board::Board, constants::WHITE, moving::mv::Move};
 
 impl Board {
     pub fn is_legal(&self, mv: &Move) -> bool {
@@ -13,7 +11,7 @@ impl Board {
             self.is_kingside_castle_legal(mv)
         } else if mv.is_queenside_castle() {
             self.is_queenside_castle_legal(mv)
-        } else if mv.get_start_field() as usize == king_i {
+        } else if mv.get_start_field() == king_i {
             self.is_king_move_legal(mv)
         } else {
             self.is_normal_move_legal(mv, king)
@@ -22,19 +20,36 @@ impl Board {
 
     pub fn is_en_passant_legal(&self, mv: &Move) -> bool {
         let cap_sq = if self.us == WHITE {
-            (mv.get_target_field() - 8) as usize
+            mv.get_target_field() - 8
         } else {
-            (mv.get_target_field() + 8) as usize
+            mv.get_target_field() + 8
         };
         let king = self.get_pieces(self.us).get_king();
         let start_bb: u64 = mv.get_start_bb();
         let target_bb: u64 = mv.get_target_bb();
         let mut occ = self.get_occupancy();
         let cap_bb = 1 << cap_sq;
-        occ &= !(start_bb | (cap_bb));
+        occ &= !(start_bb | cap_bb);
         occ |= target_bb;
         let attackers = self.attackers_to_exist(king, occ, self.enemy);
-        attackers & !cap_bb == 0
+        attackers == 0
+    }
+
+    pub fn is_en_passant_legal_when_check(&self, mv: &Move, checker: u64) -> bool {
+        let cap_bb = if self.us == WHITE {
+            mv.get_target_bb() >> 8
+        } else {
+            mv.get_target_bb() << 8
+        };
+        let king = self.get_pieces(self.us).get_king();
+        let start_bb: u64 = mv.get_start_bb();
+        let target_bb: u64 = mv.get_target_bb();
+        let mut occ = self.get_occupancy();
+        occ &= !(start_bb | cap_bb);
+        occ |= target_bb;
+        let mut attackers = self.attackers_to_exist(king, occ, self.enemy);
+        attackers &= !(checker & cap_bb);
+        attackers == 0 && checker == cap_bb
     }
 
     pub fn is_kingside_castle_legal(&self, mv: &Move) -> bool {

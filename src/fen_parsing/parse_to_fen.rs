@@ -1,4 +1,4 @@
-use crate::{board::Board, constants::*, fen_parsing::parse_fen};
+use crate::{board::board::Board, constants::*, fen_parsing::fen_parsing::parse_fen};
 
 impl Board {
     pub fn to_fen(&self) -> String {
@@ -91,7 +91,7 @@ impl Board {
             "-".to_string()
         } else {
             let file = file - 1;
-            let file_char = file_to_char(file).to_string();
+            let file_char = file_to_char(file as u32).to_string();
             if self.us == WHITE {
                 file_char.to_string() + "6"
             } else {

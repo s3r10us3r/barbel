@@ -1,6 +1,7 @@
-use crate::board::*;
+use crate::board::board::Board;
+use crate::board::board_state::BoardState;
 use crate::constants::*;
-use crate::mv::*;
+use crate::moving::mv::*;
 
 impl Board {
     pub fn make_move(&mut self, mv: &Move) {
@@ -8,6 +9,10 @@ impl Board {
         let mut new_state = state.clone();
         new_state.clear_en_passant_file();
         new_state.set_captured_piece(NONE);
+        if self.us == BLACK {
+            new_state.increase_move_clock();
+        }
+
         let start = mv.get_start_field();
         let target = mv.get_target_field();
         let moving_piece = self.players[self.us].get_piece_at(start);
@@ -17,9 +22,26 @@ impl Board {
         self.players[self.enemy].take(target);
         new_state.set_captured_piece(captured_piece);
 
-        if mv.is_double_pawn_move() {
+        if moving_piece == PAWN || mv.is_capture() {
+            new_state.clear_halfmove_clock();
+        } else {
+            new_state.increment_halfmove_clock();
+        }
+        check_castling_rights(&mut new_state, start, target);
+
+        if mv.is_kingside_castle() {
+            let rook_start = target + 1;
+            let rook_target = start + 1;
+            self.players[self.us].move_piece(rook_start, rook_target);
+            new_state.disable_all_castling_rights(self.us);
+        } else if mv.is_queenside_castle() {
+            let rook_start = target - 2;
+            let rook_target = start - 1;
+            self.players[self.us].move_piece(rook_start, rook_target);
+            new_state.disable_all_castling_rights(self.us);
+        } else if mv.is_double_pawn_move() {
             let file = get_file(target) + 1;
-            new_state.set_en_passant_file(file as u32);
+            new_state.set_en_passant_file(file as usize);
         } else if mv.is_en_passant() {
             let en_passant_field = if self.us == WHITE {
                 target - 8
@@ -28,48 +50,17 @@ impl Board {
             };
             self.players[self.enemy].take(en_passant_field);
             new_state.set_captured_piece(captured_piece);
-        }
-
-        if moving_piece == KING {
-            new_state.disable_all_castling_rights(self.us);
-        }
-        if start == 0 || target == 0 {
-            new_state.disable_queenside_castling_rights(WHITE);
-        } else if start == 7 || target == 7 {
-            new_state.disable_kingside_castling_rights(WHITE);
-        } else if start == 56 || target == 56 {
-            new_state.disable_queenside_castling_rights(BLACK);
-        } else if start == 63 || target == 63 {
-            new_state.disable_kingside_castling_rights(BLACK);
-        }
-
-        if mv.is_promotion() {
+        } else if mv.is_promotion() {
             let promotion_piece = mv.get_promotion_piece();
             self.players[self.us].take(target);
             self.players[self.us].add_piece(target, promotion_piece);
+        } else if moving_piece == KING {
+            new_state.disable_all_castling_rights(self.us);
         }
 
-        if mv.is_queenside_castle() {
-            let rook_start = target - 2;
-            let rook_target = start - 1;
-            self.players[self.us].move_piece(rook_start, rook_target);
-        } else if mv.is_kingside_castle() {
-            let rook_start = target + 1;
-            let rook_target = start + 1;
-            self.players[self.us].move_piece(rook_start, rook_target);
-        }
-
-        if moving_piece == PAWN || mv.is_capture() {
-            new_state.clear_halfmove_clock();
-        } else {
-            new_state.increment_halfmove_clock();
-        }
-
-        if self.us == BLACK {
-            new_state.increase_move_clock();
-        }
         self.push_state_stack(new_state);
         (self.us, self.enemy) = (self.enemy, self.us);
+        self.compute_occ_and_checkers();
     }
 
     pub fn unmake_move(&mut self, mv: &Move) {
@@ -105,6 +96,19 @@ impl Board {
     }
 }
 
+#[inline]
+fn check_castling_rights(new_state: &mut BoardState, start: usize, target: usize) {
+    if start == 0 || target == 0 {
+        new_state.disable_queenside_castling_rights(WHITE);
+    } else if start == 7 || target == 7 {
+        new_state.disable_kingside_castling_rights(WHITE);
+    } else if start == 56 || target == 56 {
+        new_state.disable_queenside_castling_rights(BLACK);
+    } else if start == 63 || target == 63 {
+        new_state.disable_kingside_castling_rights(BLACK);
+    }
+}
+
 fn construct_move(start: &str, target: &str, code: u16) -> Move {
     let start = field_str_to_num(start);
     let target = field_str_to_num(target);
@@ -119,14 +123,14 @@ fn field_str_to_num(field_str: &str) -> u16 {
 }
 
 #[inline]
-fn get_file(field: u16) -> u16 {
+fn get_file(field: usize) -> usize {
     field % 8
 }
 
 #[cfg(test)]
 mod test {
     use super::{construct_move, Move};
-    use crate::fen_parsing::parse_fen;
+    use crate::fen_parsing::fen_parsing::parse_fen;
     #[test]
     fn should_make_and_unmake_e2_to_e4() {
         let fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

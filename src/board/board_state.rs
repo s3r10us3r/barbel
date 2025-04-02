@@ -1,4 +1,4 @@
-use crate::constants::{BLACK, KING, KINGSIDE_CASTLE_MASK, QUEEN, WHITE};
+use crate::constants::{BLACK, KING, QUEEN, WHITE};
 
 #[derive(Clone)]
 pub struct BoardState {
@@ -10,10 +10,12 @@ impl BoardState {
         BoardState { value: 0 }
     }
 
+    #[inline]
     pub fn can_castle_kingside(&self, color: usize) -> bool {
         self.value & KINGSIDE_CASTLE_MASKS[color] != 0
     }
 
+    #[inline]
     pub fn can_castle_queenside(&self, color: usize) -> bool {
         self.value & QUEENSIDE_CASTLE_MASKS[color] != 0
     }
@@ -22,18 +24,22 @@ impl BoardState {
         self.value = (self.value & !CASTLING_RIGHTS_MASK) | (castling_rights << 1);
     }
 
+    #[inline]
     pub fn get_castling_rights(&self) -> u32 {
         (self.value & CASTLING_RIGHTS_MASK) >> 1
     }
 
+    #[inline]
     pub fn disable_all_castling_rights(&mut self, color: usize) {
         self.value &= !CASTLE_MASKS[color];
     }
 
+    #[inline]
     pub fn disable_kingside_castling_rights(&mut self, color: usize) {
         self.value &= !KINGSIDE_CASTLE_MASKS[color];
     }
 
+    #[inline]
     pub fn disable_queenside_castling_rights(&mut self, color: usize) {
         self.value &= !QUEENSIDE_CASTLE_MASKS[color];
     }
@@ -49,11 +55,13 @@ impl BoardState {
         self.value |= mask;
     }
 
-    pub fn get_en_passant_file(&self) -> u32 {
-        (self.value & EN_PASSANT_FILE_MASK) >> 5
+    #[inline]
+    pub fn get_en_passant_file(&self) -> usize {
+        ((self.value & EN_PASSANT_FILE_MASK) >> 5) as usize
     }
 
-    pub fn set_en_passant_file(&mut self, file: u32) {
+    pub fn set_en_passant_file(&mut self, file: usize) {
+        let file = file as u32;
         self.value = (self.value & !EN_PASSANT_FILE_MASK) | (file << 5);
     }
 
@@ -89,6 +97,7 @@ impl BoardState {
         (self.value & MOVE_CLOCK_MASK) >> 17
     }
 
+    #[inline]
     pub fn get_captured_piece(&self) -> u32 {
         (self.value & CAPTURED_PIECE_MASK) >> 29
     }

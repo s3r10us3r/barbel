@@ -1,21 +1,20 @@
 use std::ops::Index;
 
-use crate::attack_maps::diagonal_attacks_from;
-use crate::attack_maps::map_negative_ray_attacks;
-use crate::attack_maps::map_positive_ray_attacks;
-use crate::attack_maps::orthogonal_attacks_from;
+use crate::attacks::diagonal_attacks_from;
+use crate::attacks::map_negative_ray_attacks;
+use crate::attacks::map_positive_ray_attacks;
+use crate::attacks::orthogonal_attacks_from;
+use crate::bitboard_helpers::get_lsb;
 use crate::bitboard_helpers::has_more_than_one;
 use crate::bitboard_helpers::pop_lsb;
-use crate::board::Board;
+use crate::board::board::Board;
 use crate::constants::*;
 use crate::lookups::*;
-use crate::mv::Move;
+use crate::moving::mv::Move;
 
 pub fn generate_moves(move_list: &mut MoveList, board: &Board) {
     move_list.reset();
-    let king = board.get_pieces(board.us).get_king();
-    let occ = board.get_occupancy();
-    let checkers = board.attackers_to_exist(king, occ, board.enemy);
+    let checkers = board.get_checkers();
     if checkers == 0 {
         gen_legal_moves(move_list, board);
     } else if has_more_than_one(checkers) {
@@ -39,11 +38,11 @@ fn gen_evasions(move_list: &mut MoveList, board: &Board) {
 }
 
 fn gen_checked(move_list: &mut MoveList, board: &Board, checker: u64) {
-    gen_evasions(move_list, board);
     let enemy_piece_set = board.get_pieces(board.enemy);
     let us_piece_set = board.get_pieces(board.us);
-    let king_sq = us_piece_set.get_king().trailing_zeros() as usize;
-    let checker_sq = checker.trailing_zeros() as usize;
+    let king = us_piece_set.get_king();
+    let king_sq = get_lsb(&king);
+    let checker_sq = get_lsb(&checker);
     let mut target_mask = checker;
     if (enemy_piece_set.get_diagonals() | enemy_piece_set.get_orthogonals()) & checker != 0 {
         target_mask |= BB_BETWEEN[king_sq][checker_sq];
@@ -55,27 +54,8 @@ fn gen_checked(move_list: &mut MoveList, board: &Board, checker: u64) {
     move_list.gen_diagonal_moves(us_piece_set.get_diagonals(), enemy_mask, occupancy);
     move_list.gen_knight_moves(us_piece_set.get_knights(), enemy_mask, occupancy);
     move_list.gen_en_passant(board.us, us_piece_set.get_pawns(), board);
-
-    let king = us_piece_set.get_king();
-    for i in (0..move_list.get_count()).rev() {
-        let mv = &move_list[i];
-        if mv.get_start_bb() & king != 0 {
-            continue;
-        }
-        if mv.is_en_passant() {
-            let cap_bb = if board.us == WHITE {
-                mv.get_target_bb() >> 8
-            } else {
-                mv.get_target_bb() << 8
-            };
-            if target_mask & !cap_bb != 0 {
-                move_list.remove(i);
-            }
-        } else if mv.get_target_bb() & target_mask == 0 {
-            move_list.remove(i);
-        }
-    }
-    filter_illegal_moves(move_list, board);
+    move_list.gen_king_moves(king, enemy_mask, occupancy);
+    filter_illegal_moves_when_check(move_list, board, target_mask, checker);
 }
 
 fn gen_legal_moves(move_list: &mut MoveList, board: &Board) {
@@ -101,6 +81,29 @@ fn filter_illegal_moves(move_list: &mut MoveList, board: &Board) {
     }
 }
 
+fn filter_illegal_moves_when_check(
+    move_list: &mut MoveList,
+    board: &Board,
+    target_mask: u64,
+    checker: u64,
+) {
+    let king = board.get_pieces(board.us).get_king();
+    for i in (0..move_list.get_count()).rev() {
+        let mv = &move_list[i];
+        if mv.get_start_bb() & king != 0 {
+            if !board.is_king_move_legal(mv) {
+                move_list.remove(i);
+            }
+        } else if mv.is_en_passant() {
+            if !board.is_en_passant_legal_when_check(mv, checker) {
+                move_list.remove(i);
+            }
+        } else if mv.get_target_bb() & target_mask == 0 || !board.is_normal_move_legal(mv, king) {
+            move_list.remove(i);
+        }
+    }
+}
+
 fn gen_pseudo_legal_moves(move_list: &mut MoveList, board: &Board) {
     let us_piece_set = board.get_pieces(board.us);
     let enemy_piece_set = board.get_pieces(board.enemy);
@@ -111,8 +114,12 @@ fn gen_pseudo_legal_moves(move_list: &mut MoveList, board: &Board) {
     move_list.gen_diagonal_moves(us_piece_set.get_diagonals(), enemy_mask, occupancy);
     move_list.gen_knight_moves(us_piece_set.get_knights(), enemy_mask, occupancy);
     move_list.gen_king_moves(us_piece_set.get_king(), enemy_mask, occupancy);
-    move_list.gen_kingside_castle(board.us, occupancy, board);
-    move_list.gen_queenside_castle(board.us, occupancy, board);
+    if board.get_state().can_castle_kingside(board.us) {
+        move_list.gen_kingside_castle(board.us, occupancy);
+    }
+    if board.get_state().can_castle_queenside(board.us) {
+        move_list.gen_queenside_castle(board.us, occupancy);
+    }
     move_list.gen_en_passant(board.us, us_piece_set.get_pawns(), board);
 }
 
@@ -126,14 +133,11 @@ fn get_pinned(board: &Board) -> u64 {
     let mut snipers = (orthogonal_attacks_from(king_bb, enemies)
         & enemy_piece_set.get_orthogonals())
         | (diagonal_attacks_from(king_bb, enemies) & enemy_piece_set.get_diagonals());
-    let king_i = king_bb.trailing_zeros() as usize;
+    let king_i = get_lsb(&king_bb);
     let mut pinns = 0;
     while snipers != 0 {
         let snip_sq = pop_lsb(&mut snipers) as usize;
-        let between = BB_BETWEEN[king_i][snip_sq] & allies;
-        if between != 0 && !has_more_than_one(between) {
-            pinns |= between;
-        }
+        pinns |= BB_BETWEEN[king_i][snip_sq] & allies;
     }
     pinns
 }
@@ -177,7 +181,7 @@ impl MoveList {
         self.count
     }
 
-    fn gen_queenside_castle(&mut self, color: usize, occ: u64, board: &Board) {
+    fn gen_queenside_castle(&mut self, color: usize, occ: u64) {
         let king_start: u16;
         let king_target: u16;
         let castle_mask: u64;
@@ -190,7 +194,7 @@ impl MoveList {
             king_target = 2 + 56;
             castle_mask = QUEENSIDE_CATLE_MASK << 56;
         }
-        if board.get_state().can_castle_queenside(color) && occ & castle_mask == 0 {
+        if occ & castle_mask == 0 {
             self.push_move(Move::new_queenside_castle(king_start, king_target));
         }
     }
@@ -215,7 +219,7 @@ impl MoveList {
         }
     }
 
-    fn gen_kingside_castle(&mut self, color: usize, occ: u64, board: &Board) {
+    fn gen_kingside_castle(&mut self, color: usize, occ: u64) {
         let king_start: u16;
         let king_target: u16;
         let castle_mask: u64;
@@ -228,7 +232,7 @@ impl MoveList {
             king_target = 6 + 56;
             castle_mask = KINGSIDE_CASTLE_MASK << 56;
         }
-        if board.get_state().can_castle_kingside(color) && occ & castle_mask == 0 {
+        if occ & castle_mask == 0 {
             self.push_move(Move::new_kingside_castle(king_start, king_target));
         }
     }
@@ -237,7 +241,6 @@ impl MoveList {
         while pawns != 0 {
             let start = pop_lsb(&mut pawns) as u16;
             let lsb_pointer = 1 << start;
-            //moves
             let single_move_mask;
             let double_move_mask;
             let left_capture_mask;
@@ -399,7 +402,7 @@ impl MoveList {
 
 #[cfg(test)]
 mod test {
-    use crate::{board::Board, fen_parsing::parse_fen, lookups::RAY_LOOKUP};
+    use crate::{board::board::Board, fen_parsing::fen_parsing::parse_fen};
 
     use super::{generate_moves, MoveList};
 

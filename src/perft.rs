@@ -1,10 +1,9 @@
 use std::time::Instant;
 
 use crate::{
-    board::Board,
-    fen_parsing::{parse_fen, FenError},
-    move_generation::{generate_moves, MoveList},
-    mv::Move,
+    board::board::Board,
+    fen_parsing::fen_parsing::{parse_fen, FenError},
+    moving::move_generation::{generate_moves, MoveList},
 };
 
 pub struct PerftResult {

@@ -22,15 +22,17 @@ impl PieceSet {
         }
     }
 
+    #[inline]
     pub fn get_all(&self) -> u64 {
         self.pawns | self.orthogonals | self.diagonals | self.knights | self.king
     }
 
+    #[inline]
     pub fn get_queens(&self) -> u64 {
         self.diagonals & self.orthogonals
     }
 
-    pub fn get_piece_at(&self, field: u16) -> u8 {
+    pub fn get_piece_at(&self, field: usize) -> u8 {
         let pointer: u64 = 1 << field;
         if pointer & self.pawns != 0 {
             return PAWN;
@@ -55,6 +57,7 @@ impl PieceSet {
         NONE
     }
 
+    #[inline]
     pub fn make_queenside_castle(&mut self) {
         if self.color == WHITE {
             self.king = 0b100;
@@ -67,6 +70,7 @@ impl PieceSet {
         }
     }
 
+    #[inline]
     pub fn unmake_queenside_castle(&mut self) {
         if self.color == WHITE {
             self.king = 0x10;
@@ -79,6 +83,7 @@ impl PieceSet {
         }
     }
 
+    #[inline]
     pub fn make_kingside_castle(&mut self) {
         if self.color == WHITE {
             self.king = 0x40;
@@ -91,6 +96,7 @@ impl PieceSet {
         }
     }
 
+    #[inline]
     pub fn unmake_kingside_castle(&mut self) {
         if self.color == WHITE {
             self.king = 0x10;
@@ -103,7 +109,8 @@ impl PieceSet {
         }
     }
 
-    pub fn move_piece(&mut self, start: u16, target: u16) {
+    #[inline]
+    pub fn move_piece(&mut self, start: usize, target: usize) {
         let start_mask: u64 = 1 << start;
         let target_mask: u64 = 1 << target;
         if start_mask & self.pawns != 0 {
@@ -131,7 +138,8 @@ impl PieceSet {
         }
     }
 
-    pub fn take(&mut self, field: u16) {
+    #[inline]
+    pub fn take(&mut self, field: usize) {
         let mask: u64 = !(1 << field);
         self.pawns &= mask;
         self.diagonals &= mask;
@@ -139,7 +147,8 @@ impl PieceSet {
         self.knights &= mask;
     }
 
-    pub fn add_piece(&mut self, field: u16, piece_type: u8) {
+    #[inline]
+    pub fn add_piece(&mut self, field: usize, piece_type: u8) {
         let mask: u64 = 1 << field;
         match piece_type {
             PAWN => self.pawns |= mask,
@@ -155,6 +164,7 @@ impl PieceSet {
         }
     }
 
+    #[inline]
     pub fn get_pawns(&self) -> u64 {
         self.pawns
     }
@@ -163,6 +173,7 @@ impl PieceSet {
         self.pawns
     }
 
+    #[inline]
     pub fn get_orthogonals(&self) -> u64 {
         self.orthogonals
     }
@@ -171,6 +182,7 @@ impl PieceSet {
         self.orthogonals = orthogonals;
     }
 
+    #[inline]
     pub fn get_knights(&self) -> u64 {
         self.knights
     }
@@ -179,6 +191,7 @@ impl PieceSet {
         self.knights = knights;
     }
 
+    #[inline]
     pub fn get_diagonals(&self) -> u64 {
         self.diagonals
     }
@@ -187,6 +200,7 @@ impl PieceSet {
         self.diagonals = diagonals;
     }
 
+    #[inline]
     pub fn get_king(&self) -> u64 {
         self.king
     }

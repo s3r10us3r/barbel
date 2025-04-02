@@ -1,4 +1,4 @@
-use crate::{bitboard_helpers::*, board::Board, constants::*, lookups::*};
+use crate::{bitboard_helpers::*, board::board::Board, constants::*, lookups::*};
 
 impl Board {
     pub fn attackers_to_exist(&self, square: u64, occupancy: u64, color: usize) -> u64 {

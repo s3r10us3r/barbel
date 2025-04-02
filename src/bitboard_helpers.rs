@@ -1,8 +1,8 @@
 #[inline]
-pub fn pop_lsb(bitboard: &mut u64) -> u32 {
+pub fn pop_lsb(bitboard: &mut u64) -> usize {
     let result = bitboard.trailing_zeros();
     *bitboard &= *bitboard - 1;
-    result
+    result as usize
 }
 
 #[inline]

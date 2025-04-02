@@ -1,6 +1,4 @@
-use std::{clone, fmt::format};
-
-use crate::{board::Board, constants::*, piece_set::PieceSet};
+use crate::constants::*;
 
 pub struct Move {
     value: u16,
@@ -88,12 +86,12 @@ impl Move {
         self.value & CODE_MASK == 3
     }
 
-    pub fn get_start_field(&self) -> u16 {
-        (self.value & START_MASK) >> 10
+    pub fn get_start_field(&self) -> usize {
+        ((self.value & START_MASK) >> 10) as usize
     }
 
-    pub fn get_target_field(&self) -> u16 {
-        (self.value & TARGET_MASK) >> 4
+    pub fn get_target_field(&self) -> usize {
+        ((self.value & TARGET_MASK) >> 4) as usize
     }
 
     pub fn get_move_code(&self) -> u16 {
@@ -119,7 +117,7 @@ impl Move {
     }
 }
 
-fn field_to_str(field: u16) -> String {
+fn field_to_str(field: usize) -> String {
     let row = (field / 8) as u32;
     let file = (field % 8) as u8;
     let file_char = (97 + file) as char;
