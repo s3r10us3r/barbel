@@ -93,6 +93,7 @@ impl Board {
                 self.players[self.us].move_piece(target, start);
             }
         }
+        self.compute_occ_and_checkers();
     }
 }
 

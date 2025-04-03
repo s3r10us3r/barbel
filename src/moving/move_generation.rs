@@ -168,7 +168,7 @@ impl MoveList {
         self.count += 1;
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.count = 0;
     }
 
@@ -396,6 +396,34 @@ impl MoveList {
         while mask != 0 {
             let target = pop_lsb(&mut mask) as u16;
             self.push_move(Move::new_capture(start, target));
+        }
+    }
+}
+
+pub struct Iter<'a> {
+    moves: &'a [Move],
+    index: usize,
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a Move;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.moves.len() {
+            let result = &self.moves[self.index];
+            self.index += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+}
+
+impl MoveList {
+    pub fn iter(&self) -> Iter {
+        Iter {
+            moves: &self.moves[..self.count],
+            index: 0,
         }
     }
 }

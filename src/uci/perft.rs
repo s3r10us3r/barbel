@@ -2,7 +2,6 @@ use std::time::Instant;
 
 use crate::{
     board::board::Board,
-    fen_parsing::fen_parsing::{parse_fen, FenError},
     moving::move_generation::{generate_moves, MoveList},
 };
 
@@ -11,23 +10,22 @@ pub struct PerftResult {
     pub result: usize,
 }
 
-pub fn make_perft(fen: &str, depth: i32) -> Result<PerftResult, FenError> {
-    let mut board = parse_fen(fen)?;
+pub fn make_perft(depth: i32, board: &mut Board) -> PerftResult {
     let start = Instant::now();
     let mut result = 0;
     let mut mv_list = MoveList::new();
-    generate_moves(&mut mv_list, &board);
+    generate_moves(&mut mv_list, board);
     let count = mv_list.get_count();
     for i in 0..count {
         let mv = &mv_list[i];
         board.make_move(mv);
-        let mv_result = test_perft(&mut board, depth - 1);
-        println!("{}: {}", mv.to_str(), mv_result);
+        let mv_result = test_perft(board, depth - 1);
         result += mv_result;
         board.unmake_move(mv);
+        println!("{}: {}", mv.to_str(), mv_result);
     }
     let time = start.elapsed().as_secs_f32();
-    Ok(PerftResult { time, result })
+    PerftResult { time, result }
 }
 
 fn test_perft(board: &mut Board, depth_left: i32) -> usize {
@@ -54,6 +52,8 @@ fn test_perft(board: &mut Board, depth_left: i32) -> usize {
 
 #[cfg(test)]
 mod test {
+    use crate::fen_parsing::fen_parsing::parse_fen;
+
     use super::make_perft;
 
     #[test]
@@ -107,7 +107,8 @@ mod test {
     }
 
     fn should_return_correct_perft_result(fen: &str, expected: usize, depth: i32) {
-        let result = make_perft(fen, depth).unwrap();
+        let mut board = parse_fen(fen).unwrap();
+        let result = make_perft(depth, &mut board);
         assert_eq!(expected, result.result);
     }
 }

@@ -1,4 +1,4 @@
-use perft::make_perft;
+use uci::uci_interpreter::UciController;
 
 mod attacks;
 mod bitboard_helpers;
@@ -7,12 +7,10 @@ mod constants;
 mod fen_parsing;
 mod lookups;
 mod moving;
-mod perft;
+mod uci;
 
-pub fn run_perft(fen: &str, depth: i32) {
-    let result = make_perft(fen, depth);
-    match result {
-        Ok(r) => println!("Result: {}, Time: {}", r.result, r.time),
-        Err(e) => println!("ERROR WHEN PARSING FEN: {:?}", e),
-    };
+pub fn run() {
+    println!("Barbel 0.1 by s3r10us3r");
+    let mut uci_controller = UciController::new();
+    uci_controller.run();
 }
