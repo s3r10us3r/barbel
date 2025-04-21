@@ -1,6 +1,9 @@
-use super::engine::Engine;
+use super::engine::{self, Engine};
 use crate::uci::perft::make_perft;
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    process::exit,
+};
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -45,13 +48,31 @@ impl UciController {
             "isready" => self.is_ready(),
             "stop" => self.stop(),
             "help" => self.help(),
+            "uci" => self.uci(),
+            "quit" => self.quit(),
+            "ucinewgame" => self.ucinewgame(),
             _ => self.invalid_command(command),
         }
+    }
+
+    fn ucinewgame(&mut self) {
+        self.engine = Engine::new();
+        _ = self.engine.set_pos(START_POS);
+    }
+
+    fn quit(&mut self) {
+        exit(0);
+    }
+
+    fn uci(&mut self) {
+        println!("uciok");
     }
 
     fn go(&mut self, args: Vec<&str>) {
         if args[0] == "perft" {
             self.go_perft(args);
+        } else if args[0] == "depth" {
+            self.go_depth(args);
         }
     }
 
@@ -66,6 +87,18 @@ impl UciController {
         }
     }
 
+    fn go_depth(&mut self, args: Vec<&str>) {
+        let parse_result = args[1].parse::<i32>();
+        if let Ok(depth) = parse_result {
+            if depth <= 0 {
+                println!("Invalid depth {}, depth must be at least 1", { depth });
+            }
+            self.engine.search_to_depth(depth);
+        } else {
+            println!("Invalid depth: {}", args[1]);
+        }
+    }
+
     fn position(&mut self, args: Vec<&str>) {
         match args[0] {
             "startpos" => {
@@ -75,7 +108,10 @@ impl UciController {
                 }
                 if args.len() > 2 && args[1] == "moves" {
                     for mv_s in args[2..].iter() {
-                        let _ = self.engine.make_move(mv_s);
+                        let e = self.engine.make_move(mv_s);
+                        if let Err(e) = e {
+                            println!("MOVE NOT FOUND: {mv_s}");
+                        }
                     }
                 }
             }
@@ -89,8 +125,8 @@ impl UciController {
                     println!("Invalid fen!");
                     return;
                 }
-                if args.len() > 8 && args[8] == "moves" {
-                    for mv_s in args[6..].iter() {
+                if args.len() > 8 && args[7] == "moves" {
+                    for mv_s in args[8..].iter() {
                         let _ = self.engine.make_move(mv_s);
                     }
                 }

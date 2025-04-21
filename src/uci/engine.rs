@@ -1,7 +1,9 @@
 use crate::{
     board::board::Board,
+    constants::WHITE,
     fen_parsing::fen_parsing::parse_fen,
     moving::move_generation::{generate_moves, MoveList},
+    search::search_to_depth,
 };
 
 pub struct StateError {
@@ -52,6 +54,10 @@ impl Engine {
             }
         }
         Err(StateError::new(&format!("Move {} not found", mv_s)))
+    }
+
+    pub fn search_to_depth(&mut self, depth: i32) {
+        search_to_depth(&mut self.board, depth);
     }
 
     pub fn get_board(&self) -> &Board {

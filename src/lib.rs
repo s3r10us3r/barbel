@@ -4,9 +4,11 @@ mod attacks;
 mod bitboard_helpers;
 mod board;
 mod constants;
+mod evaluation;
 mod fen_parsing;
 mod lookups;
 mod moving;
+mod search;
 mod uci;
 
 pub fn run() {

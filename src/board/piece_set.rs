@@ -178,6 +178,16 @@ impl PieceSet {
         self.orthogonals
     }
 
+    #[inline]
+    pub fn get_rooks(&self) -> u64 {
+        self.orthogonals & !self.diagonals
+    }
+
+    #[inline]
+    pub fn get_bishops(&self) -> u64 {
+        self.diagonals & !self.orthogonals
+    }
+
     pub fn set_orthognals(&mut self, orthogonals: u64) {
         self.orthogonals = orthogonals;
     }

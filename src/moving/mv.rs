@@ -4,6 +4,12 @@ pub struct Move {
     value: u16,
 }
 
+impl Clone for Move {
+    fn clone(&self) -> Self {
+        Move { value: self.value }
+    }
+}
+
 impl Move {
     pub fn new(start: u16, target: u16, code: u16) -> Move {
         Move {
@@ -67,6 +73,10 @@ impl Move {
 
     pub fn is_promotion(&self) -> bool {
         self.value & (1 << 3) != 0
+    }
+
+    pub fn is_non_quiet(&self) -> bool {
+        self.is_capture()
     }
 
     //this DOES NOT check wether move was a promotion

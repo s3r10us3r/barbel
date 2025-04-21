@@ -172,7 +172,7 @@ impl MoveList {
         self.count = 0;
     }
 
-    fn remove(&mut self, i: usize) {
+    pub fn remove(&mut self, i: usize) {
         self.count -= 1;
         self.moves.swap(self.count, i);
     }
