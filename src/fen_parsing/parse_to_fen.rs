@@ -128,7 +128,7 @@ fn piece_to_char(piece: u8) -> char {
         KNIGHT => 'n',
         QUEEN => 'q',
         KING => 'k',
-        _ => panic!("Invalid piece code in piece to char"),
+        _ => panic!("Invalid piece code in piece to char {}", piece),
     }
 }
 

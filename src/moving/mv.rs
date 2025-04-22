@@ -1,5 +1,6 @@
 use crate::constants::*;
 
+#[derive(Default, PartialEq)]
 pub struct Move {
     value: u16,
 }
@@ -15,6 +16,14 @@ impl Move {
         Move {
             value: start << 10 | target << 4 | code,
         }
+    }
+
+    pub fn null() -> Move {
+        Move { value: 0 }
+    }
+
+    pub fn is_null(&self) -> bool {
+        self.value == 0
     }
 
     pub fn get_start_bb(&self) -> u64 {

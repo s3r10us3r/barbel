@@ -163,6 +163,10 @@ impl MoveList {
         }
     }
 
+    pub fn moves(&mut self) -> &mut [Move] {
+        &mut self.moves
+    }
+
     fn push_move(&mut self, mv: Move) {
         self.moves[self.count] = mv;
         self.count += 1;
