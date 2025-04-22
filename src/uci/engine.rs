@@ -1,9 +1,8 @@
 use crate::{
-    board::board::Board,
-    constants::WHITE,
+    board::{board::Board, zobrist_hashing::ZobristHasher},
     fen_parsing::fen_parsing::parse_fen,
     moving::move_generation::{generate_moves, MoveList},
-    search::search_to_depth,
+    search::alpha_beta::Searcher,
 };
 
 pub struct StateError {
@@ -22,13 +21,15 @@ impl StateError {
 pub struct Engine {
     board: Board,
     mvs: MoveList,
+    searcher: Searcher,
 }
 
 impl Engine {
     pub fn new() -> Self {
         Engine {
-            board: Board::new(),
+            board: Board::new(ZobristHasher::new()),
             mvs: MoveList::new(),
+            searcher: Searcher::new(),
         }
     }
 
@@ -57,7 +58,8 @@ impl Engine {
     }
 
     pub fn search_to_depth(&mut self, depth: i32) {
-        search_to_depth(&mut self.board, depth);
+        let mv = self.searcher.search_to_depth(&mut self.board, depth);
+        println!("bestmove {}", mv.to_str());
     }
 
     pub fn get_board(&self) -> &Board {

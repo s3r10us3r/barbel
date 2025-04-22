@@ -1,25 +1,29 @@
 use crate::constants::{BLACK, WHITE};
 
-use super::{board_state::BoardState, piece_set::PieceSet};
+use super::{board_state::BoardState, piece_set::PieceSet, zobrist_hashing::ZobristHasher};
 
 pub struct Board {
     pub players: [PieceSet; 2],
     pub us: usize,
     pub enemy: usize,
+    pub hasher: ZobristHasher,
     board_state: BoardState,
     state_stack: Vec<BoardState>,
+    hash_stack: Vec<u64>,
     checkers: u64,
     occ: u64,
 }
 
 impl Board {
-    pub fn new() -> Board {
+    pub fn new(hasher: ZobristHasher) -> Board {
         Board {
             players: [PieceSet::new(BLACK), PieceSet::new(WHITE)],
             us: WHITE,
+            hasher,
             enemy: BLACK,
             board_state: BoardState::new(),
             state_stack: vec![],
+            hash_stack: vec![],
             checkers: 0,
             occ: 0,
         }
@@ -47,6 +51,18 @@ impl Board {
         let mut state = self.state_stack.pop().unwrap();
         std::mem::swap(&mut self.board_state, &mut state);
         state
+    }
+
+    pub fn push_hash(&mut self) {
+        let hash = self.hasher.get_hash();
+        self.hash_stack.push(hash);
+    }
+
+    pub fn pop_hash(&mut self) {
+        let hash_o = self.hash_stack.pop();
+        if let Some(hash) = hash_o {
+            self.hasher.set_hash(hash);
+        }
     }
 
     pub fn set_side_to_move(&mut self, color: usize) {
@@ -82,5 +98,13 @@ impl Board {
 
     pub fn get_checkers(&self) -> u64 {
         self.checkers
+    }
+
+    pub fn get_hash(&self) -> u64 {
+        self.hasher.get_hash()
+    }
+
+    pub fn set_hasher(&mut self, hasher: ZobristHasher) {
+        self.hasher = hasher;
     }
 }

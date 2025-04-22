@@ -6,15 +6,6 @@ use crate::moving::mv::*;
 impl Board {
     pub fn make_move(&mut self, mv: &Move) {
         let state = self.get_state();
-
-        self.push_hash();
-        let ep_file = state.get_en_passant_file();
-        let castling_rights = state.get_castling_rights();
-        self.hasher.toggle_castling_rights(castling_rights as usize);
-        if ep_file != 0 {
-            self.hasher.toggle_en_passant_file(ep_file - 1);
-        }
-
         let mut new_state = state.clone();
         new_state.clear_en_passant_file();
         new_state.set_captured_piece(NONE);
@@ -25,7 +16,6 @@ impl Board {
         let start = mv.get_start_field();
         let target = mv.get_target_field();
         let moving_piece = self.move_piece(start, target, self.us);
-        check_castling_rights(&mut new_state, start, target);
 
         let captured_piece = self.take(target, self.enemy);
         new_state.set_captured_piece(captured_piece);
@@ -35,6 +25,7 @@ impl Board {
         } else {
             new_state.increment_halfmove_clock();
         }
+        check_castling_rights(&mut new_state, start, target);
 
         if mv.is_kingside_castle() {
             let rook_start = target + 1;
@@ -55,23 +46,16 @@ impl Board {
             } else {
                 target + 8
             };
-            let captured_piece = self.take(en_passant_field, self.enemy);
+            self.players[self.enemy].take(en_passant_field);
             new_state.set_captured_piece(captured_piece);
         } else if mv.is_promotion() {
             let promotion_piece = mv.get_promotion_piece();
-            self.take(target, self.us);
-            self.add_piece(target, promotion_piece, self.us);
+            self.players[self.us].take(target);
+            self.players[self.us].add_piece(target, promotion_piece);
         } else if moving_piece == KING {
             new_state.disable_all_castling_rights(self.us);
         }
 
-        let new_ep = new_state.get_en_passant_file();
-        if new_ep != 0 {
-            self.hasher.toggle_en_passant_file(new_ep - 1);
-        }
-        self.hasher.toggle_moving_side();
-        self.hasher
-            .toggle_castling_rights(new_state.get_castling_rights() as usize);
         self.push_state_stack(new_state);
         (self.us, self.enemy) = (self.enemy, self.us);
         self.compute_occ_and_checkers();
@@ -90,6 +74,7 @@ impl Board {
                 target + 8
             };
             self.players[self.enemy].add_piece(en_passant_square, PAWN);
+            return;
         } else if mv.is_queenside_castle() {
             self.players[self.us].unmake_queenside_castle();
         } else if mv.is_kingside_castle() {
@@ -106,7 +91,6 @@ impl Board {
                 self.players[self.us].move_piece(target, start);
             }
         }
-        self.pop_hash();
         self.compute_occ_and_checkers();
     }
 
@@ -119,17 +103,10 @@ impl Board {
     }
 
     fn take(&mut self, square: usize, color: usize) -> u8 {
-        let piece = self.players[color].get_piece_at(square);
-        if piece != NONE {
-            self.players[color].take(square);
-            self.hasher.toggle_sq_piece(square, piece as usize, color);
-        }
-        piece
-    }
-
-    fn add_piece(&mut self, square: usize, piece: u8, color: usize) {
-        self.players[color].add_piece(square, piece);
+        let piece = self.players[color].get_piece_at(color);
+        self.players[color].take(square);
         self.hasher.toggle_sq_piece(square, piece as usize, color);
+        piece
     }
 }
 
@@ -137,14 +114,11 @@ impl Board {
 fn check_castling_rights(new_state: &mut BoardState, start: usize, target: usize) {
     if start == 0 || target == 0 {
         new_state.disable_queenside_castling_rights(WHITE);
-    }
-    if start == 7 || target == 7 {
+    } else if start == 7 || target == 7 {
         new_state.disable_kingside_castling_rights(WHITE);
-    }
-    if start == 56 || target == 56 {
+    } else if start == 56 || target == 56 {
         new_state.disable_queenside_castling_rights(BLACK);
-    }
-    if start == 63 || target == 63 {
+    } else if start == 63 || target == 63 {
         new_state.disable_kingside_castling_rights(BLACK);
     }
 }

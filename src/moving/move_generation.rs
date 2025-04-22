@@ -181,6 +181,10 @@ impl MoveList {
         self.count
     }
 
+    pub fn get_move(&self, i: usize) -> &Move {
+        &self.moves[i]
+    }
+
     fn gen_queenside_castle(&mut self, color: usize, occ: u64) {
         let king_start: u16;
         let king_target: u16;

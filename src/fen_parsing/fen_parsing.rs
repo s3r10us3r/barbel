@@ -1,4 +1,5 @@
 use crate::board::board::Board;
+use crate::board::zobrist_hashing::ZobristHasher;
 use crate::constants::*;
 
 #[derive(Debug, PartialEq)]
@@ -10,7 +11,7 @@ pub enum FenError {
 }
 
 pub fn parse_fen(fen: &str) -> Result<Board, FenError> {
-    let mut board = Board::new();
+    let mut board = Board::new(ZobristHasher::new());
     let splits: Vec<&str> = fen.split(" ").collect();
     if splits.len() < 6 {
         return Err(FenError::InvalidStructure {
@@ -27,6 +28,7 @@ pub fn parse_fen(fen: &str) -> Result<Board, FenError> {
     board = parse_half_move_clock(board, splits[4])?;
     board = parse_move_clock(board, splits[5])?;
     board.compute_occ_and_checkers();
+    board.compute_hash();
     Ok(board)
 }
 

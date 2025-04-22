@@ -1,15 +1,15 @@
 use uci::uci_interpreter::UciController;
 
-mod attacks;
-mod bitboard_helpers;
-mod board;
-mod constants;
-mod evaluation;
-mod fen_parsing;
-mod lookups;
-mod moving;
-mod search;
-mod uci;
+pub mod attacks;
+pub mod bitboard_helpers;
+pub mod board;
+pub mod constants;
+pub mod evaluation;
+pub mod fen_parsing;
+pub mod lookups;
+pub mod moving;
+pub mod search;
+pub mod uci;
 
 pub fn run() {
     println!("Barbel 0.1 by s3r10us3r");
