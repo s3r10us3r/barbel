@@ -1,10 +1,11 @@
-const K: usize = 22;
+const K: usize = 23;
 
 #[derive(Clone, Copy, Default)]
 pub struct Entry {
     pub key: u64,
     pub depth_left: i32,
     pub score: i32,
+    pub generation: i32
 }
 
 pub struct TTable {
@@ -35,7 +36,7 @@ impl TTable {
     pub fn store(&mut self, new: Entry) {
         let index = (new.key as usize) & self.mask;
         let existing = &self.table[index];
-        if existing.key == 0 || existing.depth_left < new.depth_left {
+        if existing.key == 0 || existing.depth_left < new.depth_left || new.generation - 5 >= existing.generation {
             self.table[index] = new;
         }
     }

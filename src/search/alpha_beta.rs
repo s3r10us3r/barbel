@@ -1,15 +1,15 @@
-use std::{clone, i32};
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::{clone, thread};
+use std::{i32, sync::atomic::AtomicBool};
+use std::time::{Duration, Instant};
 
 const INFINITY: i32 = 10_000_000;
 const MATE: i32 = 1_000_000;
 
 use crate::{
-    board::board::Board,
-    evaluation::evaluate,
-    moving::{
-        move_generation::{generate_moves, MoveList},
-        mv::Move,
-    },
+    board::board::Board, constants::WHITE, evaluation::evaluate, 
+    moving::{move_generation::{generate_moves, MoveList}, mv::Move,}
 };
 
 use super::{
@@ -24,6 +24,8 @@ pub struct Searcher {
     ttable_hits: i32,
     nodes_searched: i32,
     max_depth: i32,
+    generation: i32,
+    stop: Arc<AtomicBool>
 }
 
 impl Searcher {
@@ -35,6 +37,8 @@ impl Searcher {
             ttable_hits: 0,
             nodes_searched: 0,
             max_depth: 0,
+            generation: 0,
+            stop: Arc::new(AtomicBool::new(false))
         }
     }
 
@@ -46,19 +50,72 @@ impl Searcher {
         self.pv_table.get_best(0)
     }
 
-    fn make_search(&mut self, board: &mut Board, depth: i32) {
+    pub fn search_with_time(&mut self, board: &mut Board, wtime: u64, btime: u64, winc: u64, binc: u64) -> Move {
+        self.pv_table = PvTable::new(50 as usize);
+        self.stop.store(false, Ordering::Relaxed);
+        let (time, inc) = if board.us == WHITE {
+            (wtime, winc)
+        } else {
+            (btime, binc)
+        };
+
+        let slice = (time / 50 + inc) as u128;
+        let start = Instant::now();
+
+        thread::scope(|s| {
+            let stop = Arc::clone(&self.stop);
+
+            let handle = s.spawn(|| {
+                let mut depth = 1;
+                let mut best = Move::new_null_mv();
+                while start.elapsed().as_millis() < slice  / 2
+                && !self.stop.load(Ordering::Relaxed) {
+                    let value = self.make_search(board, depth);
+                    let mv = self.pv_table.get_best(0);
+                    if !self.stop.load(Ordering::Relaxed) {
+                        best = mv;
+                    }
+                    if value > MATE / 10 {
+                        break;
+                    }
+                    depth += 1;
+                }
+                if best.is_null() {
+                    let mut mv_list = MoveList::new();
+                    generate_moves(&mut mv_list, board);
+                    best = mv_list.get_move(0).clone();
+                }
+                best
+            });
+
+            while start.elapsed().as_millis() < slice {
+                thread::sleep(Duration::from_millis(2));
+            }
+            stop.store(true, Ordering::Relaxed);
+            handle.join().unwrap()
+        })
+    }
+
+    fn make_search(&mut self, board: &mut Board, depth: i32) -> i32 {
+        self.generation += 1;
         self.search_depth = depth;
         self.ttable_hits = 0;
         self.nodes_searched = 0;
         self.max_depth = 0;
         let best_value = self.nega_max(board, 0, -INFINITY, INFINITY);
-        println!(
-            "info depth {} cp {} tthits {} nodes searched {} depth reached {}",
-            depth, best_value, self.ttable_hits, self.nodes_searched, self.max_depth
-        );
+        if !self.stop.load(Ordering::Relaxed) {
+            println!(
+                "info depth {} cp {} tthits {} nodes searched {} depth reached {} pv {}",
+                depth, best_value, self.ttable_hits, self.nodes_searched, self.max_depth, self.pv_table.get_pv_string()
+            );
+        }
+        best_value
     }
 
     pub fn nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
+        if self.stop.load(Ordering::Relaxed) {
+            return alpha;
+        }
         if depth == self.search_depth {
             return self.quiesce_nega_max(board, depth, alpha, beta);
         }
@@ -68,7 +125,7 @@ impl Searcher {
         self.order_moves(&mut moves, depth);
         if moves.get_count() == 0 {
             if board.is_check() {
-                return -MATE;
+                return -MATE+depth;
             } else {
                 return 0;
             }
@@ -104,11 +161,14 @@ impl Searcher {
             _ => {
                 let score = -self.nega_max(board, depth + 1, -beta, -alpha);
                 let new_entry = Entry {
+                    generation: self.generation,
                     key: board.get_hash(),
                     depth_left,
                     score,
                 };
-                self.ttable.store(new_entry);
+                if !self.stop.load(Ordering::Relaxed) {
+                    self.ttable.store(new_entry);
+                }
                 score
             }
         }
@@ -121,6 +181,9 @@ impl Searcher {
         mut alpha: i32,
         beta: i32,
     ) -> i32 {
+        if self.stop.load(Ordering::Relaxed) {
+            return alpha;
+        }
         if depth > self.max_depth {
             self.max_depth = depth;
         }
@@ -129,7 +192,7 @@ impl Searcher {
         generate_moves(&mut moves, board);
         if moves.get_count() == 0 {
             if board.is_check() {
-                return -MATE;
+                return -MATE+depth;
             } else {
                 return 0;
             }
@@ -176,8 +239,11 @@ impl Searcher {
                     key: board.get_hash(),
                     depth_left,
                     score,
+                    generation: self.generation
                 };
-                self.ttable.store(new_entry);
+                if !self.stop.load(Ordering::Relaxed) {
+                    self.ttable.store(new_entry);
+                }
                 score
             }
         }

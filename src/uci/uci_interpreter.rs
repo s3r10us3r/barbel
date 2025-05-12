@@ -73,6 +73,8 @@ impl UciController {
             self.go_perft(args);
         } else if args[0] == "depth" {
             self.go_depth(args);
+        } else if args[0] == "wtime" {
+            self.go_time(args);
         }
     }
 
@@ -99,6 +101,31 @@ impl UciController {
         }
     }
 
+    fn go_time(&mut self, args: Vec<&str>) {
+        let mut wtime: u64 = 0;
+        let mut btime: u64 = 0;
+        let mut winc: u64 = 0;
+        let mut binc: u64 = 0;
+
+        for i in (0..args.len()-1).step_by(2) {
+            let s = args[i];
+            let tr = args[i+1].parse::<u64>();
+            if let Ok(t) = tr {
+                match s {
+                    "wtime" => wtime = t,
+                    "btime" => btime = t,
+                    "winc" => winc = t,
+                    "binc" => binc = t,
+                    _ => panic!("Invallid arguments")
+                }
+            } else {
+                panic!("Invalid arguments")
+            }
+        }
+        self.engine.search_with_time(wtime, btime, winc, binc);
+    }
+        
+
     fn position(&mut self, args: Vec<&str>) {
         match args[0] {
             "startpos" => {
@@ -109,7 +136,7 @@ impl UciController {
                 if args.len() > 2 && args[1] == "moves" {
                     for mv_s in args[2..].iter() {
                         let e = self.engine.make_move(mv_s);
-                        if let Err(e) = e {
+                        if let Err(_) = e {
                             println!("MOVE NOT FOUND: {mv_s}");
                         }
                     }

@@ -100,6 +100,7 @@ impl Board {
     }
 }
 
+//hard coded zobrist-hashing numbers
 const NUMS: [u64; 793] = [
     18422006497503122313,
     7347384725104522589,

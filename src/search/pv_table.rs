@@ -25,6 +25,22 @@ impl PvTable {
         self.table[self.index(ply, 0)].clone()
     }
 
+    pub fn get_pv_string(&self) -> String {
+        let mut i = 0;
+        let mut res = Vec::new();
+        while i < self.n && !self.table[self.index(0, i)].is_null() {
+            let mv = self.table[self.index(0, i)].clone();
+            res.push(mv);
+            i += 1;
+        }
+        let mut s = String::new();
+        for mv in res {
+            s.push_str(mv.to_str().as_str());
+            s.push_str(" ");
+        }
+        s
+    }
+
     fn movcpy(&mut self, mut target: usize, mut source: usize, mut n: usize) {
         while n != 0 && !self.table[source].is_null() {
             n -= 1;
