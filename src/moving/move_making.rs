@@ -5,6 +5,7 @@ use crate::moving::mv::*;
 
 impl Board {
     pub fn make_move(&mut self, mv: &Move) {
+        debug_assert!(!mv.is_null());
         let state = self.get_state();
 
         self.push_hash();

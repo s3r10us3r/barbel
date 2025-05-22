@@ -1,5 +1,5 @@
 use super::engine::{self, Engine};
-use crate::uci::perft::make_perft;
+use crate::{tests::wac::wac_test, uci::perft::make_perft};
 use std::{
     io::{self, Write},
     process::exit,
@@ -51,6 +51,7 @@ impl UciController {
             "uci" => self.uci(),
             "quit" => self.quit(),
             "ucinewgame" => self.ucinewgame(),
+            "wac" => wac_test(),
             _ => self.invalid_command(command),
         }
     }
@@ -75,6 +76,7 @@ impl UciController {
             self.go_depth(args);
         } else if args[0] == "wtime" {
             self.go_time(args);
+        } else if args[0] == "movetime" {
         }
     }
 
@@ -124,14 +126,18 @@ impl UciController {
         }
         self.engine.search_with_time(wtime, btime, winc, binc);
     }
-        
+            
+    fn go_movetime(&mut self, args: Vec<&str>) {
+        let movetime = args[1].parse::<u64>();
+    }
 
     fn position(&mut self, args: Vec<&str>) {
         match args[0] {
             "startpos" => {
                 let res = self.engine.set_pos(START_POS);
-                if let Err(_) = res {
+                if let Err(e) = res {
                     println!("Invalid fen!");
+                    println!("{:?}", e);
                 }
                 if args.len() > 2 && args[1] == "moves" {
                     for mv_s in args[2..].iter() {
@@ -143,17 +149,25 @@ impl UciController {
                 }
             }
             "fen" => {
-                if args.len() <= 5 {
+                if args.len() <= 4 {
                     println!("Invalid fen!");
+                    println!("too little arguments")
                 }
-                let fen_str = args[1..7].join(" ");
+                let fen_str = args[1..].join(" ");
+                let splits: Vec<&str> = fen_str.split("moves").collect();
+                let (fen_str, moves_opt) = if splits.len() > 2 {
+                    (splits[0].trim(), Some(splits[1]))
+                } else {
+                    (splits[0], None)
+                };
                 let res = self.engine.set_pos(&fen_str);
-                if let Err(_) = res {
+                if let Err(e) = res {
                     println!("Invalid fen!");
+                    println!("{:?}", e);
                     return;
                 }
-                if args.len() > 8 && args[7] == "moves" {
-                    for mv_s in args[8..].iter() {
+                if let Some(moves_str) = moves_opt {
+                    for mv_s in moves_str.trim().split(' ') {
                         let _ = self.engine.make_move(mv_s);
                     }
                 }

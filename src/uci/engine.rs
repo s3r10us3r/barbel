@@ -1,6 +1,6 @@
 use crate::{
     board::{board::Board, zobrist_hashing::ZobristHasher},
-    fen_parsing::fen_parsing::parse_fen,
+    fen_parsing::fen_parsing::{parse_fen, FenError},
     moving::move_generation::{generate_moves, MoveList},
     search::alpha_beta::Searcher,
 };
@@ -33,13 +33,9 @@ impl Engine {
         }
     }
 
-    pub fn set_pos(&mut self, fen: &str) -> Result<(), StateError> {
+    pub fn set_pos(&mut self, fen: &str) -> Result<(), FenError> {
         self.mvs.reset();
-        let fen_res = parse_fen(fen);
-        let new_board = match fen_res {
-            Ok(b) => b,
-            Err(_) => return Err(StateError::new("Invalid fen")),
-        };
+        let new_board = parse_fen(fen)?;
         self.board = new_board;
         Ok(())
     }

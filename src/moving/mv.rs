@@ -1,4 +1,4 @@
-use crate::constants::*;
+use crate::{board::board::Board, constants::*};
 
 #[derive(Default, PartialEq)]
 pub struct Move {

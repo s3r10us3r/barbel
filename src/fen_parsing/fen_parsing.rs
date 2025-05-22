@@ -13,7 +13,7 @@ pub enum FenError {
 pub fn parse_fen(fen: &str) -> Result<Board, FenError> {
     let mut board = Board::new(ZobristHasher::new());
     let splits: Vec<&str> = fen.split(" ").collect();
-    if splits.len() < 6 {
+    if splits.len() < 4 {
         return Err(FenError::InvalidStructure {
             reason: format!(
                 "Invalid number of splits, expected 6, found {}",
@@ -25,8 +25,12 @@ pub fn parse_fen(fen: &str) -> Result<Board, FenError> {
     board = parse_side_to_move(board, splits[1])?;
     board = parse_castling_rights(board, splits[2])?;
     board = parse_en_passant_file(board, splits[3])?;
-    board = parse_half_move_clock(board, splits[4])?;
-    board = parse_move_clock(board, splits[5])?;
+    if splits.len() > 4 {
+        board = parse_half_move_clock(board, splits[4])?;
+    }
+    if splits.len() > 5 {
+        board = parse_move_clock(board, splits[5])?;
+    }
     board.compute_occ_and_checkers();
     board.compute_hash();
     Ok(board)

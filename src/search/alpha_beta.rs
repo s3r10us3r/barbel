@@ -51,15 +51,20 @@ impl Searcher {
     }
 
     pub fn search_with_time(&mut self, board: &mut Board, wtime: u64, btime: u64, winc: u64, binc: u64) -> Move {
-        self.pv_table = PvTable::new(50 as usize);
-        self.stop.store(false, Ordering::Relaxed);
         let (time, inc) = if board.us == WHITE {
             (wtime, winc)
         } else {
             (btime, binc)
         };
 
-        let slice = (time / 50 + inc) as u128;
+        let time = time / 50 + inc;
+        self.search_to_time(board, time, true)
+    }
+
+    pub fn search_to_time(&mut self, board: &mut Board, time: u64, cut: bool) -> Move {
+        self.pv_table = PvTable::new(50 as usize);
+        self.stop.store(false, Ordering::Relaxed);
+        let time = time as u128;
         let start = Instant::now();
 
         thread::scope(|s| {
@@ -68,7 +73,7 @@ impl Searcher {
             let handle = s.spawn(|| {
                 let mut depth = 1;
                 let mut best = Move::new_null_mv();
-                while start.elapsed().as_millis() < slice  / 2
+                while (start.elapsed().as_millis() < time  / 2 && !cut)
                 && !self.stop.load(Ordering::Relaxed) {
                     let value = self.make_search(board, depth);
                     let mv = self.pv_table.get_best(0);
@@ -85,10 +90,11 @@ impl Searcher {
                     generate_moves(&mut mv_list, board);
                     best = mv_list.get_move(0).clone();
                 }
+                self.stop.store(true, Ordering::Relaxed);
                 best
             });
 
-            while start.elapsed().as_millis() < slice {
+            while start.elapsed().as_millis() < time && !stop.load(Ordering::Relaxed) {
                 thread::sleep(Duration::from_millis(2));
             }
             stop.store(true, Ordering::Relaxed);

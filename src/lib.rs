@@ -10,9 +10,10 @@ pub mod lookups;
 pub mod moving;
 pub mod search;
 pub mod uci;
+pub mod tests;
 
 pub fn run() {
-    println!("Barbel 0.23 by s3r10us3r");
+    println!("Barbel 0.22 by s3r10us3r");
     let mut uci_controller = UciController::new();
     uci_controller.run();
 }
