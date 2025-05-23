@@ -73,7 +73,7 @@ impl Searcher {
             let handle = s.spawn(|| {
                 let mut depth = 1;
                 let mut best = Move::new_null_mv();
-                while (start.elapsed().as_millis() < time  / 2 && !cut)
+                while !(start.elapsed().as_millis() > time / 2 && cut)
                 && !self.stop.load(Ordering::Relaxed) {
                     let value = self.make_search(board, depth);
                     let mv = self.pv_table.get_best(0);

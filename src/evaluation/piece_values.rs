@@ -4,6 +4,8 @@ use crate::{
     constants::{BISHOP, KNIGHT, PAWN, QUEEN, ROOK, WHITE},
 };
 
+use super::phase::interp_phase;
+
 struct PieceValues {
     values: [i32; 6],
 }
@@ -12,12 +14,12 @@ struct PieceValues {
 const MIDGAME_PIECE_VALUES: PieceValues = PieceValues{values: [0,100,300,350,455,900]};
 const ENDGAME_PIECE_VALUES: PieceValues = PieceValues{values: [0,150,300,350,550,1000]};
 
-pub fn evaluate_pieces(board: &Board, phase: f32) -> i32 {
+pub fn evaluate_pieces(board: &Board, phase: i32) -> i32 {
     let midgame_sum = evaluate_pieces_w_vals(board.get_pieces(board.us), MIDGAME_PIECE_VALUES)
         - evaluate_pieces_w_vals(board.get_pieces(board.enemy), MIDGAME_PIECE_VALUES);
     let endgame_sum = evaluate_pieces_w_vals(board.get_pieces(board.us), ENDGAME_PIECE_VALUES)
         - evaluate_pieces_w_vals(board.get_pieces(board.enemy), ENDGAME_PIECE_VALUES);
-    ((midgame_sum as f32 * phase) + (endgame_sum as f32 * (1. - phase))) as i32
+    interp_phase(midgame_sum, endgame_sum, phase)
 }
 
 fn evaluate_pieces_w_vals(piece_set: &PieceSet, piece_values: PieceValues) -> i32 {
@@ -49,19 +51,6 @@ pub fn simplified_king_eval_end(piece_set: &PieceSet) -> i32 {
         k_i = k_i % 8 + col * 8;
     }
     return KING_PST_END[k_i];
-}
-
-fn get_piece_scores(mut piece_bb: u64, pst: [i32; 64], color: usize) -> i32 {
-    let mut res = 0;
-    while piece_bb != 0 {
-        let mut i = pop_lsb(&mut piece_bb);
-        if color == WHITE {
-            let col = 7 - i / 8;
-            i = i % 8 + col * 8;
-        }
-        res += pst[i];
-    }
-    res
 }
 
 const KING_PST_MID: [i32; 64] = [
