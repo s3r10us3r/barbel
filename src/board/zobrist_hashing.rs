@@ -10,8 +10,8 @@ pub struct ZobristHasher {
     hash: u64,
 }
 
-impl ZobristHasher {
-    pub fn new() -> Self {
+impl Default for ZobristHasher {
+    fn default() -> Self {
         let (square_piece, rest) = NUMS.as_slice().split_at(768);
         let (castling_rights, rest) = rest.split_at(16);
         let (en_passant_file, rest) = rest.split_at(8);
@@ -23,6 +23,12 @@ impl ZobristHasher {
             black_on_move,
             hash: 0,
         }
+    }
+}
+
+impl ZobristHasher {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn new_from_numbers(nums: &Vec<u64>) -> Self {
@@ -49,7 +55,7 @@ impl ZobristHasher {
 
     pub fn toggle_sq_piece(&mut self, square: usize, piece: usize, color: usize) {
         //piece - 1 because 0 indicates NONE piece
-        self.hash ^= self.square_piece[square + (piece - 1) * 64 + color * 384];
+        self.hash ^= self.square_piece[square + piece * 64 + color * 384];
     }
 
     pub fn toggle_moving_side(&mut self) {
@@ -81,10 +87,10 @@ impl Board {
             let white_piece = self.players[WHITE].get_piece_at(sq);
             let black_piece = self.players[BLACK].get_piece_at(sq);
             if white_piece != NONE {
-                self.hasher.toggle_sq_piece(sq, white_piece as usize, WHITE);
+                self.hasher.toggle_sq_piece(sq, white_piece, WHITE);
             }
             if black_piece != NONE {
-                self.hasher.toggle_sq_piece(sq, black_piece as usize, BLACK);
+                self.hasher.toggle_sq_piece(sq, black_piece, BLACK);
             }
         }
         if self.us == BLACK {

@@ -77,7 +77,6 @@ const NEIGHBOR_COLS: [u64; 8] = [FILEB, FILEA | FILEC, FILEB | FILED, FILEC | FI
 const COLS: [u64; 8] = [FILEA, FILEB, FILEC, FILED, FILEE, FILEF, FILEG, FILEH];
 
 const PASSED_LOOKUP: [[u64; 64]; 2] = compute_passed_lookup();
-const BACKWARDS_LOOKUP: [[u64; 64]; 2] = compute_backwards_lookup();
 
 //mask of pawns in front of a pawn 
 const fn compute_passed_lookup() -> [[u64; 64]; 2] {
@@ -109,41 +108,6 @@ const fn compute_passed_lookup() -> [[u64; 64]; 2] {
                 }
                 x += 1;
             }
-            res[color][i] = mask;
-            i += 1;
-        }
-        color += 1;
-    }
-    res
-}
-
-//a pawn is backwards when, the square in front of it is controlled 
-//and is not protected by other pawns
-const fn compute_backwards_lookup() -> [[u64; 64]; 2]{
-    let mut res = [[0; 64]; 2];
-    let mut color = 0;
-    while color < 2 {
-        let mut i = 8;
-        while i < 56 {
-            let mut row = i / 8;
-            let col = i % 8;
-            let col_s = if col > 0 {col - 1} else {col};
-            let col_e = if col < 7 {col + 1} else {col};
-            let mut row_e = if color == BLACK {7} else {0};
-            if row_e < row {let t = row; row = row_e; row_e = t};
-
-            let mut x= col_s;
-            let mut mask = 0;
-
-            while x <= col_e {
-                let mut y = row;
-                while y <= row_e {
-                    mask |= 1 << (y * 8 + x);
-                    y += 1;
-                }
-                x += 1;
-            }
-            mask &= !(1 << i);
             res[color][i] = mask;
             i += 1;
         }

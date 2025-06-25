@@ -49,7 +49,7 @@ impl Board {
             new_state.disable_all_castling_rights(self.us);
         } else if mv.is_double_pawn_move() {
             let file = get_file(target) + 1;
-            new_state.set_en_passant_file(file as usize);
+            new_state.set_en_passant_file(file);
         } else if mv.is_en_passant() {
             let en_passant_field = if self.us == WHITE {
                 target - 8
@@ -98,7 +98,7 @@ impl Board {
         } else {
             if mv.is_capture() {
                 let piece = popped_state.get_captured_piece();
-                self.players[self.enemy].add_piece(target, piece as u8);
+                self.players[self.enemy].add_piece(target, piece as usize);
             }
             if mv.is_promotion() {
                 self.players[self.us].take(target);
@@ -111,26 +111,26 @@ impl Board {
         self.compute_occ_and_checkers();
     }
 
-    fn move_piece(&mut self, start: usize, target: usize, color: usize) -> u8 {
+    fn move_piece(&mut self, start: usize, target: usize, color: usize) -> usize {
         let piece = self.players[color].get_piece_at(start);
         self.players[color].move_piece(start, target);
-        self.hasher.toggle_sq_piece(start, piece as usize, color);
-        self.hasher.toggle_sq_piece(target, piece as usize, color);
+        self.hasher.toggle_sq_piece(start, piece, color);
+        self.hasher.toggle_sq_piece(target, piece, color);
         piece
     }
 
-    fn take(&mut self, square: usize, color: usize) -> u8 {
+    fn take(&mut self, square: usize, color: usize) -> usize {
         let piece = self.players[color].get_piece_at(square);
         if piece != NONE {
             self.players[color].take(square);
-            self.hasher.toggle_sq_piece(square, piece as usize, color);
+            self.hasher.toggle_sq_piece(square, piece, color);
         }
         piece
     }
 
-    fn add_piece(&mut self, square: usize, piece: u8, color: usize) {
+    fn add_piece(&mut self, square: usize, piece: usize, color: usize) {
         self.players[color].add_piece(square, piece);
-        self.hasher.toggle_sq_piece(square, piece as usize, color);
+        self.hasher.toggle_sq_piece(square, piece , color);
     }
 }
 
@@ -150,19 +150,6 @@ fn check_castling_rights(new_state: &mut BoardState, start: usize, target: usize
     }
 }
 
-fn construct_move(start: &str, target: &str, code: u16) -> Move {
-    let start = field_str_to_num(start);
-    let target = field_str_to_num(target);
-    Move::new(start, target, code)
-}
-
-fn field_str_to_num(field_str: &str) -> u16 {
-    let chars: Vec<char> = field_str.chars().collect();
-    let file = chars[0] as u16 - 'a' as u16;
-    let rank = (chars[1].to_digit(10).unwrap() - 1) as u16;
-    rank * 8 + file
-}
-
 #[inline]
 fn get_file(field: usize) -> usize {
     field % 8
@@ -170,7 +157,7 @@ fn get_file(field: usize) -> usize {
 
 #[cfg(test)]
 mod test {
-    use super::{construct_move, Move};
+    use super::{Move};
     use crate::fen_parsing::fen_parsing::parse_fen;
     #[test]
     fn should_make_and_unmake_e2_to_e4() {
@@ -309,4 +296,17 @@ mod test {
         let result_fen = board.to_fen();
         assert_eq!(fen_before, &result_fen, "unmake");
     }
+
+    fn construct_move(start: &str, target: &str, code: u16) -> Move {
+        let start = field_str_to_num(start);
+        let target = field_str_to_num(target);
+        Move::new(start, target, code)
+    }
+
+    fn field_str_to_num(field_str: &str) -> u16 {
+        let chars: Vec<char> = field_str.chars().collect();
+        let file = chars[0] as u16 - 'a' as u16;
+        let rank = (chars[1].to_digit(10).unwrap() - 1) as u16;
+        rank * 8 + file
+}
 }

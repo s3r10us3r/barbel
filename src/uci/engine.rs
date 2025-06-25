@@ -5,6 +5,7 @@ use crate::{
     search::alpha_beta::Searcher,
 };
 
+#[derive(Debug)]
 pub struct StateError {
     message: String,
 }
@@ -24,13 +25,19 @@ pub struct Engine {
     searcher: Searcher,
 }
 
-impl Engine {
-    pub fn new() -> Self {
+impl Default for Engine {
+    fn default() -> Self {
         Engine {
             board: Board::new(ZobristHasher::new()),
             mvs: MoveList::new(),
             searcher: Searcher::new(),
         }
+    }
+}
+
+impl Engine {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn set_pos(&mut self, fen: &str) -> Result<(), FenError> {
@@ -41,8 +48,7 @@ impl Engine {
     }
 
     pub fn make_move(&mut self, mv_s: &str) -> Result<(), StateError> {
-        self.mvs.reset();
-        generate_moves(&mut self.mvs, &self.board);
+        self.mvs = generate_moves(&self.board);
         for mv in self.mvs.iter() {
             let mv_str = mv.to_str();
             if mv_str == mv_s {
@@ -50,7 +56,7 @@ impl Engine {
                 return Ok(());
             }
         }
-        Err(StateError::new(&format!("Move {} not found", mv_s)))
+        Err(StateError::new(&format!("Move {mv_s} not found")))
     }
 
     pub fn search_to_depth(&mut self, depth: i32) {

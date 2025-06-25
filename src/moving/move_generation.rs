@@ -12,16 +12,18 @@ use crate::constants::*;
 use crate::lookups::*;
 use crate::moving::mv::Move;
 
-pub fn generate_moves(move_list: &mut MoveList, board: &Board) {
+pub fn generate_moves(board: &Board) -> MoveList {
+    let mut move_list = MoveList::new();
     move_list.reset();
     let checkers = board.get_checkers();
     if checkers == 0 {
-        gen_legal_moves(move_list, board);
+        gen_legal_moves(&mut move_list, board);
     } else if has_more_than_one(checkers) {
-        gen_evasions(move_list, board);
+        gen_evasions(&mut move_list, board);
     } else {
-        gen_checked(move_list, board, checkers);
+        gen_checked(&mut move_list, board, checkers);
     }
+    move_list
 }
 
 fn gen_evasions(move_list: &mut MoveList, board: &Board) {
@@ -68,15 +70,14 @@ fn filter_illegal_moves(move_list: &mut MoveList, board: &Board) {
     let king = board.get_pieces(board.us).get_king();
     for i in (0..move_list.get_count()).rev() {
         let mv = &move_list[i];
-        if mv.is_en_passant()
+        if (mv.is_en_passant()
             || mv.is_kingside_castle()
             || mv.is_queenside_castle()
             || mv.get_start_bb() & pinns != 0
-            || mv.get_start_bb() & king != 0
+            || mv.get_start_bb() & king != 0)
+            && !board.is_legal(mv)
         {
-            if !board.is_legal(&mv) {
-                move_list.remove(i);
-            }
+            move_list.remove(i);
         }
     }
 }
@@ -147,6 +148,15 @@ pub struct MoveList {
     count: usize,
 }
 
+impl Default for MoveList {
+    fn default() -> Self {
+        MoveList {
+            moves: std::array::from_fn(|_| Move::new_null_mv()),
+            count: 0,
+        }
+    }
+}
+
 impl Index<usize> for MoveList {
     type Output = Move;
 
@@ -157,10 +167,7 @@ impl Index<usize> for MoveList {
 
 impl MoveList {
     pub fn new() -> Self {
-        MoveList {
-            moves: std::array::from_fn(|_| Move::new_null_mv()),
-            count: 0,
-        }
+        Self::default()
     }
 
     pub fn moves(&mut self) -> &mut [Move] {
@@ -334,7 +341,7 @@ impl MoveList {
 
     fn gen_orthogonal_moves(&mut self, mut orthogonals: u64, enemy_mask: u64, occupancy: u64) {
         while orthogonals != 0 {
-            let start = pop_lsb(&mut orthogonals) as usize;
+            let start = pop_lsb(&mut orthogonals);
             self.gen_positive_ray_moves(start, enemy_mask, occupancy, N8);
             self.gen_positive_ray_moves(start, enemy_mask, occupancy, E8);
             self.gen_negative_ray_moves(start, enemy_mask, occupancy, S8);
@@ -344,7 +351,7 @@ impl MoveList {
 
     fn gen_diagonal_moves(&mut self, mut diagonals: u64, enemy_mask: u64, occupancy: u64) {
         while diagonals != 0 {
-            let start = pop_lsb(&mut diagonals) as usize;
+            let start = pop_lsb(&mut diagonals);
             self.gen_positive_ray_moves(start, enemy_mask, occupancy, NW8);
             self.gen_positive_ray_moves(start, enemy_mask, occupancy, NE8);
             self.gen_negative_ray_moves(start, enemy_mask, occupancy, SW8);
@@ -438,9 +445,9 @@ impl MoveList {
 
 #[cfg(test)]
 mod test {
-    use crate::{board::board::Board, fen_parsing::fen_parsing::parse_fen};
+    use crate::{fen_parsing::fen_parsing::parse_fen};
 
-    use super::{generate_moves, MoveList};
+    use super::generate_moves ;
 
     #[test]
     fn should_have_correct_move_count_in_starting_position() {
@@ -488,14 +495,8 @@ mod test {
     }
 
     fn should_have_correct_move_count_in_pos(pos: &str, expected_count: usize) {
-        let board_result = parse_fen(pos);
-        let board: Board;
-        match board_result {
-            Err(e) => panic!("Error in fen parsing: {:?}", e),
-            Ok(b) => board = b,
-        }
-        let mut move_list = MoveList::new();
-        generate_moves(&mut move_list, &board);
+        let board = parse_fen(pos).unwrap();
+        let move_list = generate_moves(&board);
         for i in 0..move_list.get_count() {
             println!("{}", move_list[i].to_str());
         }

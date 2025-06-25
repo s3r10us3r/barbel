@@ -1,4 +1,4 @@
-use crate::{board::board::Board, constants::*};
+use crate::constants::*;
 
 #[derive(Default, PartialEq)]
 pub struct Move {
@@ -62,13 +62,13 @@ impl Move {
         Self::new(start, target, 5)
     }
 
-    pub fn new_promotion(start: u16, target: u16, piece: u8) -> Move {
-        let code = 8 + piece - 2;
+    pub fn new_promotion(start: u16, target: u16, piece: usize) -> Move {
+        let code = 8 + piece - 1;
         Self::new(start, target, code as u16)
     }
 
-    pub fn new_promotion_capture(start: u16, target: u16, piece: u8) -> Move {
-        let code = 12 + piece - 2;
+    pub fn new_promotion_capture(start: u16, target: u16, piece: usize) -> Move {
+        let code = 12 + piece - 1;
         Self::new(start, target, code as u16)
     }
 
@@ -89,8 +89,8 @@ impl Move {
     }
 
     //this DOES NOT check wether move was a promotion
-    pub fn get_promotion_piece(&self) -> u8 {
-        ((self.value & 0b11) + 2) as u8
+    pub fn get_promotion_piece(&self) -> usize {
+        ((self.value & 0b11) + 1) as usize
     }
 
     pub fn is_double_pawn_move(&self) -> bool {
@@ -120,7 +120,7 @@ impl Move {
     pub fn to_str(&self) -> String {
         let start_str = field_to_str(self.get_start_field());
         let target_str = field_to_str(self.get_target_field());
-        let rs = format!("{}{}", start_str, target_str);
+        let rs = format!("{start_str}{target_str}");
         if self.is_promotion() {
             let pp_str = match self.get_promotion_piece() {
                 KNIGHT => "n",
@@ -129,7 +129,7 @@ impl Move {
                 BISHOP => "b",
                 _ => panic!("INVALID PROMOTION PIECE"),
             };
-            format!("{}{}", rs, pp_str)
+            format!("{rs}{pp_str}")
         } else {
             rs
         }

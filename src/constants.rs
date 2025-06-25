@@ -1,10 +1,10 @@
-pub const NONE: u8 = 0;
-pub const PAWN: u8 = 1;
-pub const KNIGHT: u8 = 2;
-pub const BISHOP: u8 = 3;
-pub const ROOK: u8 = 4;
-pub const QUEEN: u8 = 5;
-pub const KING: u8 = 6;
+pub const PAWN: usize = 0;
+pub const KNIGHT: usize = 1;
+pub const BISHOP: usize = 2;
+pub const ROOK: usize = 3;
+pub const QUEEN: usize = 4;
+pub const KING: usize = 5;
+pub const NONE: usize = 6;
 
 pub const WHITE: usize = 1;
 pub const BLACK: usize = 0;

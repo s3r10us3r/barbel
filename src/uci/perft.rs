@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crate::{
     board::board::Board,
-    moving::move_generation::{generate_moves, MoveList},
+    moving::move_generation::generate_moves,
 };
 
 pub struct PerftResult {
@@ -13,8 +13,7 @@ pub struct PerftResult {
 pub fn make_perft(depth: i32, board: &mut Board) -> PerftResult {
     let start = Instant::now();
     let mut result = 0;
-    let mut mv_list = MoveList::new();
-    generate_moves(&mut mv_list, board);
+    let mv_list = generate_moves(board);
     let count = mv_list.get_count();
     for i in 0..count {
         let mv = &mv_list[i];
@@ -32,8 +31,7 @@ fn test_perft(board: &mut Board, depth_left: i32) -> usize {
     if depth_left == 0 {
         return 1;
     }
-    let mut new_move_list = MoveList::new();
-    generate_moves(&mut new_move_list, board);
+    let new_move_list = generate_moves(board);
     if depth_left <= 1 {
         return new_move_list.get_count();
     }

@@ -12,7 +12,7 @@ pub fn score_mobility(board: &Board, color: usize) -> i32 {
 }
 
 #[inline]
-fn compute_mobility(mut piece_mask: u64, piece: u8, occ: u64, color: usize, bonus: i32) -> i32 {
+fn compute_mobility(mut piece_mask: u64, piece: usize, occ: u64, color: usize, bonus: i32) -> i32 {
     let mut cnt = 0;
     while piece_mask != 0 {
         let sq = pop_lsb(&mut piece_mask);

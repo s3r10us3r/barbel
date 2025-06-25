@@ -1,4 +1,3 @@
-use std::fmt::format;
 
 use regex::Regex;
 
@@ -15,7 +14,7 @@ pub fn wac_test() {
     let mut entries = parse_wac();
     let mut time = INIT_TIME;
     let mut passed_count = 0;
-    while entries.len() != 0 {
+    while !entries.is_empty() {
         println!("Time per move: {}s", time / 1000);
         let mut failed_entries: Vec<WacEntry> = Vec::new();
         let mut failed_count = 0;

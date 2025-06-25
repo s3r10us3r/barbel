@@ -1,11 +1,8 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::{clone, thread};
-use std::{i32, sync::atomic::AtomicBool};
+use std::thread;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
-
-const INFINITY: i32 = 10_000_000;
-const MATE: i32 = 1_000_000;
 
 use crate::{
     board::board::Board, constants::WHITE, evaluation::evaluate, 
@@ -16,6 +13,10 @@ use super::{
     pv_table::PvTable,
     transposition::{Entry, TTable},
 };
+
+
+const INFINITY: i32 = 10_000_000;
+const MATE: i32 = 1_000_000;
 
 pub struct Searcher {
     ttable: TTable,
@@ -28,8 +29,8 @@ pub struct Searcher {
     stop: Arc<AtomicBool>
 }
 
-impl Searcher {
-    pub fn new() -> Self {
+impl Default for Searcher {
+    fn default() -> Self {
         Searcher {
             ttable: TTable::new(),
             pv_table: PvTable::new(2), //the size is arbitrary it gets overriden on new search
@@ -40,6 +41,12 @@ impl Searcher {
             generation: 0,
             stop: Arc::new(AtomicBool::new(false))
         }
+    }
+}
+
+impl Searcher {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn search_to_depth(&mut self, board: &mut Board, depth: i32) -> Move {
@@ -62,7 +69,7 @@ impl Searcher {
     }
 
     pub fn search_to_time(&mut self, board: &mut Board, time: u64, cut: bool) -> Move {
-        self.pv_table = PvTable::new(50 as usize);
+        self.pv_table = PvTable::new(50);
         self.stop.store(false, Ordering::Relaxed);
         let time = time as u128;
         let start = Instant::now();
@@ -73,7 +80,7 @@ impl Searcher {
             let handle = s.spawn(|| {
                 let mut depth = 1;
                 let mut best = Move::new_null_mv();
-                while !(start.elapsed().as_millis() > time / 2 && cut)
+                while (start.elapsed().as_millis() <= time / 2 || !cut)
                 && !self.stop.load(Ordering::Relaxed) {
                     let value = self.make_search(board, depth);
                     let mv = self.pv_table.get_best(0);
@@ -86,9 +93,8 @@ impl Searcher {
                     depth += 1;
                 }
                 if best.is_null() {
-                    let mut mv_list = MoveList::new();
-                    generate_moves(&mut mv_list, board);
-                    best = mv_list.get_move(0).clone();
+                    let moves= generate_moves(board);
+                    best = moves.get_move(0).clone();
                 }
                 self.stop.store(true, Ordering::Relaxed);
                 best
@@ -126,8 +132,7 @@ impl Searcher {
             return self.quiesce_nega_max(board, depth, alpha, beta);
         }
         self.nodes_searched += 1;
-        let mut moves = MoveList::new();
-        generate_moves(&mut moves, board);
+        let mut moves = generate_moves(board);
         self.order_moves(&mut moves, depth);
         if moves.get_count() == 0 {
             if board.is_check() {
@@ -180,13 +185,7 @@ impl Searcher {
         }
     }
 
-    pub fn quiesce_nega_max(
-        &mut self,
-        board: &mut Board,
-        depth: i32,
-        mut alpha: i32,
-        beta: i32,
-    ) -> i32 {
+    pub fn quiesce_nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop.load(Ordering::Relaxed) {
             return alpha;
         }
@@ -194,8 +193,7 @@ impl Searcher {
             self.max_depth = depth;
         }
         self.nodes_searched += 1;
-        let mut moves = MoveList::new();
-        generate_moves(&mut moves, board);
+        let moves = generate_moves(board);
         if moves.get_count() == 0 {
             if board.is_check() {
                 return -MATE+depth;

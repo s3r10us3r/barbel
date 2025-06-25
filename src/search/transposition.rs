@@ -1,11 +1,20 @@
 const K: usize = 23;
 
 #[derive(Clone, Copy, Default)]
+pub enum TTEntryType {
+    #[default]
+    Exact,
+    Lower,
+    Upper
+}
+
+#[derive(Clone, Copy, Default)]
 pub struct Entry {
     pub key: u64,
     pub depth_left: i32,
     pub score: i32,
-    pub generation: i32
+    pub generation: i32,
+    pub entry_type: TTEntryType,
 }
 
 pub struct TTable {

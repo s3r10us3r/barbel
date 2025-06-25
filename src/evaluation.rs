@@ -1,12 +1,10 @@
-use mobility::score_mobility;
-use pawn_structure::score_pawn_structure;
-use phase::{get_phase_val, interp_phase};
-use piece_squares::score_piece_squares;
-use piece_values::{
-    evaluate_pieces, simplified_king_eval_end, simplified_king_eval_mid,
-};
+use self::mobility::score_mobility;
+use self::pawn_structure::score_pawn_structure;
+use self::phase::get_phase_val;
+use self::piece_squares::score_piece_squares;
+use self::piece_values::evaluate_pieces;
 
-use crate::board::{board::Board, piece_set::PieceSet};
+use crate::board::board::Board;
 mod board_state;
 mod piece_values;
 mod pawn_structure;
@@ -16,9 +14,17 @@ mod piece_squares;
 
 pub fn evaluate(board: &Board) -> i32 {
     let phase = get_phase_val(board);
-    let mut res = evaluate_pieces(board, phase);
-    res += score_piece_squares(board, phase);
-    res += score_mobility(board, board.us) - score_mobility(board, board.enemy);
-    res += score_pawn_structure(board);
-    res
+    let pieces = evaluate_pieces(board, phase);
+    let piece_squares = score_piece_squares(board);
+    pieces + piece_squares 
 }
+
+pub fn evaluate_debug(board: &Board) {
+    let phase = get_phase_val(board);
+    let pieces = evaluate_pieces(board, phase);
+    let piece_squares = score_piece_squares(board);
+    let mobility = score_mobility(board, board.us) - score_mobility(board, board.enemy);
+    let pawn_structure = score_pawn_structure(board);
+    println!("info phase: {phase}, pieces: {pieces}, piece_squares: {piece_squares}, mobility: {mobility}, pawn_structure: {pawn_structure}");
+}
+

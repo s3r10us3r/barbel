@@ -1,9 +1,10 @@
 use crate::constants::{BLACK, KING, QUEEN, WHITE};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BoardState {
     value: u32,
 }
+
 
 impl BoardState {
     pub fn new() -> Self {
@@ -44,7 +45,7 @@ impl BoardState {
         self.value &= !QUEENSIDE_CASTLE_MASKS[color];
     }
 
-    pub fn set_castling_rights_for(&mut self, color: usize, side: u8) {
+    pub fn set_castling_rights_for(&mut self, color: usize, side: usize) {
         let mask = match (color, side) {
             (WHITE, KING) => WHITE_KINGSIDE_CASTLE_MASK,
             (WHITE, QUEEN) => WHITE_QUEENSIDE_CASTLE_MASK,
@@ -102,7 +103,7 @@ impl BoardState {
         (self.value & CAPTURED_PIECE_MASK) >> 29
     }
 
-    pub fn set_captured_piece(&mut self, piece: u8) {
+    pub fn set_captured_piece(&mut self, piece: usize) {
         self.value = (self.value & !CAPTURED_PIECE_MASK) | ((piece as u32) << 29);
     }
 }

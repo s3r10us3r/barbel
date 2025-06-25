@@ -1,4 +1,4 @@
-use super::engine::{self, Engine};
+use super::engine::Engine;
 use crate::{tests::wac::wac_test, uci::perft::make_perft};
 use std::{
     io::{self, Write},
@@ -9,6 +9,12 @@ const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 
 
 pub struct UciController {
     engine: Engine,
+}
+
+impl Default for UciController {
+    fn default() -> Self {
+        UciController::new()
+    }
 }
 
 impl UciController {
@@ -25,7 +31,7 @@ impl UciController {
             let rl = io::stdin().read_line(&mut input);
             match rl {
                 Err(e) => {
-                    println!("INPUT ERROR: {:?}", e);
+                    println!("INPUT ERROR: {e:?}");
                     return;
                 }
                 Ok(us) => {
@@ -137,12 +143,12 @@ impl UciController {
                 let res = self.engine.set_pos(START_POS);
                 if let Err(e) = res {
                     println!("Invalid fen!");
-                    println!("{:?}", e);
+                    println!("{e:?}");
                 }
                 if args.len() > 2 && args[1] == "moves" {
                     for mv_s in args[2..].iter() {
                         let e = self.engine.make_move(mv_s);
-                        if let Err(_) = e {
+                        if e.is_err() {
                             println!("MOVE NOT FOUND: {mv_s}");
                         }
                     }
@@ -160,10 +166,10 @@ impl UciController {
                 } else {
                     (splits[0], None)
                 };
-                let res = self.engine.set_pos(&fen_str);
+                let res = self.engine.set_pos(fen_str);
                 if let Err(e) = res {
                     println!("Invalid fen!");
-                    println!("{:?}", e);
+                    println!("{e:?}");
                     return;
                 }
                 if let Some(moves_str) = moves_opt {
@@ -189,9 +195,6 @@ impl UciController {
     }
 
     fn invalid_command(&self, command: &str) {
-        println!(
-            "Unknown command: '{}'. Type help for more information.",
-            command
-        );
+        println!("Unknown command: '{command}'. Type help for more information.");
     }
 }

@@ -16,7 +16,7 @@ impl Board {
     }
 }
 
-pub fn attacks_to(piece: u8, square: u64, occupancy: u64, color: usize) -> u64 {
+pub fn attacks_to(piece: usize, square: u64, occupancy: u64, color: usize) -> u64 {
     match piece {
         PAWN => PAWN_ATTACKS_TO[color][square.trailing_zeros() as usize],
         KNIGHT => KNIGHT_LOOKUP[square.trailing_zeros() as usize],
@@ -28,7 +28,7 @@ pub fn attacks_to(piece: u8, square: u64, occupancy: u64, color: usize) -> u64 {
     }
 }
 
-pub fn attacks_from(piece: u8, square: u64, occupancy: u64, color: usize) -> u64 {
+pub fn attacks_from(piece: usize, square: u64, occupancy: u64, color: usize) -> u64 {
     match piece {
         PAWN => pawn_attacks_from(square, color),
         KNIGHT => KNIGHT_LOOKUP[square.trailing_zeros() as usize],

@@ -36,7 +36,7 @@ impl PvTable {
         let mut s = String::new();
         for mv in res {
             s.push_str(mv.to_str().as_str());
-            s.push_str(" ");
+            s.push(' ');
         }
         s
     }

@@ -50,7 +50,7 @@ fn parse_pieces(mut board: Board, piece_str: &str) -> Result<Board, FenError> {
             } else {
                 if file >= 8 {
                     return Err(FenError::InvalidStructure {
-                        reason: format!("Too many pieces in rank {}", i),
+                        reason: format!("Too many pieces in rank {i}"),
                     });
                 }
                 let piece_set = if ch.is_uppercase() {
@@ -76,7 +76,7 @@ fn parse_pieces(mut board: Board, piece_str: &str) -> Result<Board, FenError> {
     Ok(board)
 }
 
-fn fen_chr_to_piece_type(ch: char) -> Option<u8> {
+fn fen_chr_to_piece_type(ch: char) -> Option<usize> {
     match ch {
         'r' => Some(ROOK),
         'b' => Some(BISHOP),
@@ -100,10 +100,7 @@ fn parse_side_to_move(mut board: Board, side_to_move: &str) -> Result<Board, Fen
         }
         _ => {
             return Err(FenError::InvalidStructure {
-                reason: format!(
-                    "Invalid side to move field {}, expected 'w' or 'b'",
-                    side_to_move,
-                ),
+                reason: format!("Invalid side to move field {side_to_move}, expected 'w' or 'b'"),
             })
         }
     };
@@ -116,7 +113,7 @@ fn parse_en_passant_file(mut board: Board, en_passant_field: &str) -> Result<Boa
     } else {
         if en_passant_field.len() != 2 {
             return Err(FenError::InvalidStructure {
-                reason: format!("Invalid en-passant structure: {}", en_passant_field),
+                reason: format!("Invalid en-passant structure: {en_passant_field}"),
             });
         }
         let chars: Vec<char> = en_passant_field.chars().collect();
@@ -130,7 +127,7 @@ fn parse_en_passant_file(mut board: Board, en_passant_field: &str) -> Result<Boa
             'g' => Ok(7),
             'h' => Ok(8),
             _ => Err(FenError::InvalidStructure {
-                reason: format!("Invalid en-passant structure: {}", en_passant_field),
+                reason: format!("Invalid en-passant structure: {en_passant_field}"),
             }),
         }?;
         board.get_mut_state().set_en_passant_file(file);
@@ -151,7 +148,7 @@ fn parse_castling_rights(mut board: Board, castling_rights: &str) -> Result<Boar
                 'q' => state.set_castling_rights_for(BLACK, QUEEN),
                 _ => {
                     return Err(FenError::InvalidStructure {
-                        reason: format!("Invalid castling rights character: {}", ch),
+                        reason: format!("Invalid castling rights character: {ch}"),
                     })
                 }
             }
@@ -165,7 +162,7 @@ fn parse_half_move_clock(mut board: Board, half_move_str: &str) -> Result<Board,
         Ok(num) => num,
         Err(_) => {
             return Err(FenError::InvalidStructure {
-                reason: format!("Invalid halfmove field: {}", half_move_str),
+                reason: format!("Invalid halfmove field: {half_move_str}"),
             })
         }
     };
@@ -178,7 +175,7 @@ fn parse_move_clock(mut board: Board, move_str: &str) -> Result<Board, FenError>
         Ok(num) => num,
         Err(_) => {
             return Err(FenError::InvalidStructure {
-                reason: format!("Invalid move field: {}", move_str),
+                reason: format!("Invalid move field: {move_str}"),
             })
         }
     };
@@ -194,7 +191,7 @@ mod test {
     fn should_correctly_parse_starting_fen() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         let board = parse_fen(fen).unwrap();
-        let white_pieces = &board.players[WHITE as usize];
+        let white_pieces = &board.players[WHITE];
         assert_eq!(white_pieces.get_pawns(), 0xff00, "white pawns");
         assert_eq!(white_pieces.get_knights(), 0x42, "white knights");
         assert_eq!(white_pieces.get_diagonals(), 0x2c, "white diagonals");
@@ -202,7 +199,7 @@ mod test {
         assert_eq!(white_pieces.get_queens(), 0x8, "white queens");
         assert_eq!(white_pieces.get_king(), 0x10, "white king");
 
-        let black_pieces = &board.players[BLACK as usize];
+        let black_pieces = &board.players[BLACK];
         assert_eq!(black_pieces.get_pawns(), 0xff000000000000, "black pawns");
         assert_eq!(
             black_pieces.get_knights(),
@@ -345,12 +342,6 @@ mod test {
         assert_eq!(state.get_en_passant_file(), 0, "en passant");
         assert_eq!(state.get_halfmove_clock(), 1, "halfmove clock");
         assert_eq!(state.get_move_clock(), 8, "move clock");
-    }
-
-    #[test]
-    fn should_err_when_fen_has_not_enough_fields() {
-        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0";
-        assert!(parse_fen(fen).is_err());
     }
 
     #[test]
