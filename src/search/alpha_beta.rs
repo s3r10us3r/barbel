@@ -4,6 +4,9 @@ use std::thread;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
+use regex::NoExpand;
+
+use crate::search::transposition::TTEntryType;
 use crate::{
     board::board::Board, constants::WHITE, evaluation::evaluate, 
     moving::{move_generation::{generate_moves, MoveList}, mv::Move,}
@@ -131,59 +134,64 @@ impl Searcher {
         if depth == self.search_depth {
             return self.quiesce_nega_max(board, depth, alpha, beta);
         }
+        let org_alpha = alpha;
+        let depth_left = self.search_depth - depth;
         self.nodes_searched += 1;
+        let hash = board.get_hash();
+
+        //ttable probe
+        if let Some(e) = self.ttable.probe(hash) {
+            self.ttable_hits += 1;
+            if e.depth_left >= depth_left && e.generation == self.generation {
+                match e.entry_type {
+                    TTEntryType::Exact => return e.score,
+                    TTEntryType::Lower => alpha = alpha.max(e.score),
+                    TTEntryType::Upper => {
+                        if e.score <= alpha {return e.score;}
+                    }
+                }
+                if alpha >= beta { return alpha; }
+            }
+        }
+
+
         let mut moves = generate_moves(board);
         self.order_moves(&mut moves, depth);
         if moves.get_count() == 0 {
-            if board.is_check() {
-                return -MATE+depth;
-            } else {
-                return 0;
-            }
+           return if board.is_check() { -MATE+depth } else { 0 }
         }
-        let mut best_value = i32::MIN;
+
+        let mut best_score = i32::MIN;
         for mv in moves.iter() {
             board.make_move(mv);
-            let score = self.score(board, depth, alpha, beta);
+            let score = -self.nega_max(board, depth + 1, -beta, -alpha);
             board.unmake_move(mv);
-            if score > best_value {
-                best_value = score;
+            if score > best_score {
+                best_score = score;
                 self.pv_table.update(depth as usize, mv.clone());
-                if score > alpha {
-                    alpha = score;
-                }
+                alpha = alpha.max(score);
             }
-            if score >= beta {
-                return best_value;
-            }
+            if alpha >= beta { break } 
         }
-        best_value
+
+        let tt_type = if best_score >= beta {TTEntryType::Lower}
+                                      else if best_score <= org_alpha {TTEntryType::Upper}
+                                      else {TTEntryType::Exact};
+        self.store_tt(hash, best_score, depth_left, tt_type);
+        best_score
     }
 
-    fn score(&mut self, board: &mut Board, depth: i32, alpha: i32, beta: i32) -> i32 {
-        let depth_left = self.search_depth - depth + 1;
-        let hash = board.get_hash();
-        let tt_entry = self.ttable.probe(hash);
-        match tt_entry {
-            Some(entry) if entry.depth_left >= depth_left => {
-                self.ttable_hits += 1;
-                entry.score
-            }
-            _ => {
-                let score = -self.nega_max(board, depth + 1, -beta, -alpha);
-                let new_entry = Entry {
-                    generation: self.generation,
-                    key: board.get_hash(),
-                    depth_left,
-                    score,
-                };
-                if !self.stop.load(Ordering::Relaxed) {
-                    self.ttable.store(new_entry);
-                }
-                score
-            }
-        }
+    fn store_tt(&mut self, hash: u64, score: i32, depth_left: i32, tt_type: TTEntryType) {
+        let entry = Entry {
+            key: hash,
+            depth_left,
+            entry_type: tt_type,
+            generation: self.generation,
+            score,
+        };
+        self.ttable.store(entry);
     }
+
 
     pub fn quiesce_nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop.load(Ordering::Relaxed) {
@@ -229,28 +237,7 @@ impl Searcher {
     }
 
     fn score_quiesce(&mut self, board: &mut Board, depth: i32, alpha: i32, beta: i32) -> i32 {
-        let depth_left = self.search_depth - depth + 1;
-        let hash = board.get_hash();
-        let tt_entry = self.ttable.probe(hash);
-        match tt_entry {
-            Some(entry) if entry.depth_left >= depth_left => {
-                self.ttable_hits += 1;
-                entry.score
-            }
-            _ => {
-                let score = -self.quiesce_nega_max(board, depth + 1, -beta, -alpha);
-                let new_entry = Entry {
-                    key: board.get_hash(),
-                    depth_left,
-                    score,
-                    generation: self.generation
-                };
-                if !self.stop.load(Ordering::Relaxed) {
-                    self.ttable.store(new_entry);
-                }
-                score
-            }
-        }
+        -self.quiesce_nega_max(board, depth + 1, -beta, -alpha)
     }
 
     fn order_moves(&self, move_list: &mut MoveList, ply: i32) {

@@ -17,6 +17,7 @@ pub struct Entry {
     pub entry_type: TTEntryType,
 }
 
+
 pub struct TTable {
     mask: usize,
     table: Box<[Entry]>,
