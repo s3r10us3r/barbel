@@ -1,5 +1,5 @@
-use crate::board::board::Board;
-use crate::board::zobrist_hashing::ZobristHasher;
+use crate::position::board::Board;
+use crate::position::zobrist_hashing::ZobristHasher;
 use crate::constants::*;
 
 #[derive(Debug, PartialEq)]

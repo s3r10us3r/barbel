@@ -1,4 +1,4 @@
-use crate::{board::board::Board, constants::*};
+use crate::{position::board::Board, constants::*};
 
 impl Board {
     pub fn to_fen(&self) -> String {
@@ -136,7 +136,7 @@ fn piece_to_char(piece: usize) -> char {
 
 #[cfg(test)]
 mod test {
-    use crate::fen_parsing::fen_parsing::parse_fen;
+    use crate::fen_parsing::parse_fen::parse_fen;
 
     #[test]
     fn should_parse_back_starting_fen() {

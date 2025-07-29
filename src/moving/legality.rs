@@ -1,4 +1,4 @@
-use crate::{bitboard_helpers::get_lsb, board::board::Board, constants::WHITE, moving::mv::Move};
+use crate::{bitboard_helpers::get_lsb, position::board::Board, constants::WHITE, moving::mv::Move};
 
 impl Board {
     pub fn is_legal(&self, mv: &Move) -> bool {

@@ -7,7 +7,7 @@ use crate::attacks::orthogonal_attacks_from;
 use crate::bitboard_helpers::get_lsb;
 use crate::bitboard_helpers::has_more_than_one;
 use crate::bitboard_helpers::pop_lsb;
-use crate::board::board::Board;
+use crate::position::board::Board;
 use crate::constants::*;
 use crate::lookups::*;
 use crate::moving::mv::Move;
@@ -445,7 +445,7 @@ impl MoveList {
 
 #[cfg(test)]
 mod test {
-    use crate::{fen_parsing::fen_parsing::parse_fen};
+    use crate::{fen_parsing::parse_fen::parse_fen};
 
     use super::generate_moves ;
 

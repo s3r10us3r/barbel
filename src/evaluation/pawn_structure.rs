@@ -1,4 +1,4 @@
-use crate::{bitboard_helpers::pop_lsb, board::board::Board, constants::*};
+use crate::{bitboard_helpers::pop_lsb, position::board::Board, constants::*};
 
 pub fn score_pawn_structure(board: &Board) -> i32 {
     eval_single_pawns(board, board.us, board.enemy) - eval_single_pawns(board, board.enemy, board.us)
@@ -118,7 +118,7 @@ const fn compute_passed_lookup() -> [[u64; 64]; 2] {
 
 #[cfg(test)]
 mod test {
-    use crate::{evaluation::pawn_structure::{DOUBLED, ISOLATED_PAWN, TRIPLED}, fen_parsing::fen_parsing::parse_fen};
+    use crate::{evaluation::pawn_structure::{DOUBLED, ISOLATED_PAWN, TRIPLED}, fen_parsing::parse_fen::parse_fen};
 
     use super::eval_single_pawns;
 

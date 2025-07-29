@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::{
-    board::board::Board,
+    position::board::Board,
     moving::move_generation::generate_moves,
 };
 
@@ -50,7 +50,7 @@ fn test_perft(board: &mut Board, depth_left: i32) -> usize {
 
 #[cfg(test)]
 mod test {
-    use crate::fen_parsing::fen_parsing::parse_fen;
+    use crate::fen_parsing::parse_fen::parse_fen;
 
     use super::make_perft;
 

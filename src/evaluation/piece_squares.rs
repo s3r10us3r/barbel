@@ -1,4 +1,4 @@
-use crate::{bitboard_helpers::pop_lsb, board::{board::Board, piece_set::PieceSet}, constants::{BISHOP, BLACK, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}};
+use crate::{bitboard_helpers::pop_lsb, position::{board::Board, piece_set::PieceSet}, constants::{BISHOP, BLACK, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}};
 
 pub fn score_piece_squares(board: &Board) -> i32 {
     let score = score_piece_squares_phase(board, &MG_TABLE);

@@ -1,4 +1,4 @@
-use crate::board::{board::Board, piece_set::PieceSet};
+use crate::position::{board::Board, piece_set::PieceSet};
 
 pub fn interp_phase(mg_val: i32, eg_val: i32, phase: i32) -> i32 {
     if phase == 0 {

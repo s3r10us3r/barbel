@@ -1,7 +1,7 @@
 
 use regex::Regex;
 
-use crate::{fen_parsing::fen_parsing::parse_fen, search::alpha_beta::Searcher};
+use crate::{fen_parsing::parse_fen::parse_fen, search::alpha_beta::Searcher};
 #[derive(Clone)]
 struct WacEntry {
     pub fen: String,

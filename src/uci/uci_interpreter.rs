@@ -1,8 +1,7 @@
 use super::engine::Engine;
-use crate::{tests::wac::wac_test, uci::perft::make_perft};
+use crate::{tests::{nps::make_nps, test_suites::NOLOT, wac::wac_test}, uci::perft::make_perft};
 use std::{
-    io::{self, Write},
-    process::exit,
+    env, fs, io::{self, Write}, process::exit
 };
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -58,6 +57,7 @@ impl UciController {
             "quit" => self.quit(),
             "ucinewgame" => self.ucinewgame(),
             "wac" => wac_test(),
+            "nps" => nps_test(),
             _ => self.invalid_command(command),
         }
     }
@@ -197,4 +197,10 @@ impl UciController {
     fn invalid_command(&self, command: &str) {
         println!("Unknown command: '{command}'. Type help for more information.");
     }
+}
+
+fn nps_test() {
+    let nps_result = make_nps(NOLOT, 5);
+    let nps = nps_result.nodes as f64 / (nps_result.time as f64 / 1000.);
+    println!("\nNodes searched: {}\nTime measured: {:.2}s\nNodes per second: {:.2}", nps_result.nodes, nps_result.time as f64 / 1000., nps);
 }

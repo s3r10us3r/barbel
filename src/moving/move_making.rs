@@ -1,5 +1,5 @@
-use crate::board::board::Board;
-use crate::board::board_state::BoardState;
+use crate::position::board::Board;
+use crate::position::board_state::BoardState;
 use crate::constants::*;
 use crate::moving::mv::*;
 
@@ -158,7 +158,7 @@ fn get_file(field: usize) -> usize {
 #[cfg(test)]
 mod test {
     use super::{Move};
-    use crate::fen_parsing::fen_parsing::parse_fen;
+    use crate::fen_parsing::parse_fen::parse_fen;
     #[test]
     fn should_make_and_unmake_e2_to_e4() {
         let fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

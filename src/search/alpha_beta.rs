@@ -4,11 +4,9 @@ use std::thread;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
-use regex::NoExpand;
-
 use crate::search::transposition::TTEntryType;
 use crate::{
-    board::board::Board, constants::WHITE, evaluation::evaluate, 
+    position::board::Board, constants::WHITE, evaluation::evaluate, 
     moving::{move_generation::{generate_moves, MoveList}, mv::Move,}
 };
 
@@ -53,6 +51,7 @@ impl Searcher {
     }
 
     pub fn search_to_depth(&mut self, board: &mut Board, depth: i32) -> Move {
+        self.nodes_searched = 0;
         self.pv_table = PvTable::new(depth as usize);
         for i in 1..(depth + 1) {
             self.make_search(board, i);
@@ -72,6 +71,7 @@ impl Searcher {
     }
 
     pub fn search_to_time(&mut self, board: &mut Board, time: u64, cut: bool) -> Move {
+        self.nodes_searched = 0;
         self.pv_table = PvTable::new(50);
         self.stop.store(false, Ordering::Relaxed);
         let time = time as u128;
@@ -115,7 +115,6 @@ impl Searcher {
         self.generation += 1;
         self.search_depth = depth;
         self.ttable_hits = 0;
-        self.nodes_searched = 0;
         self.max_depth = 0;
         let best_value = self.nega_max(board, 0, -INFINITY, INFINITY);
         if !self.stop.load(Ordering::Relaxed) {
@@ -221,7 +220,7 @@ impl Searcher {
                 continue;
             }
             board.make_move(mv);
-            let score = self.score_quiesce(board, depth, alpha, beta);
+            let score = -self.quiesce_nega_max(board, depth + 1, -beta, -alpha);
             board.unmake_move(mv);
             if score > best_value {
                 best_value = score;
@@ -234,10 +233,6 @@ impl Searcher {
             }
         }
         best_value
-    }
-
-    fn score_quiesce(&mut self, board: &mut Board, depth: i32, alpha: i32, beta: i32) -> i32 {
-        -self.quiesce_nega_max(board, depth + 1, -beta, -alpha)
     }
 
     fn order_moves(&self, move_list: &mut MoveList, ply: i32) {
@@ -253,5 +248,9 @@ impl Searcher {
                 break;
             }
         }
+    }
+
+    pub fn get_nodes_searched(&self) -> i32 {
+        self.nodes_searched
     }
 }

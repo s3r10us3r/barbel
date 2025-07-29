@@ -1,5 +1,5 @@
 use crate::{
-    board::{board::Board, piece_set::PieceSet},
+    position::{board::Board, piece_set::PieceSet},
     constants::{BISHOP, KNIGHT, PAWN, QUEEN, ROOK},
 };
 

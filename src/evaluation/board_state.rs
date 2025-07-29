@@ -1,4 +1,4 @@
-use crate::board::board::Board;
+use crate::position::board::Board;
 
 impl Board {
     pub fn is_check(&self) -> bool {

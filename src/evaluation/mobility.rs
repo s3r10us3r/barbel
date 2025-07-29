@@ -1,4 +1,4 @@
-use crate::{attacks::attacks_from, bitboard_helpers::pop_lsb, board::board::Board, constants::{BISHOP, KNIGHT, QUEEN, ROOK}};
+use crate::{attacks::attacks_from, bitboard_helpers::pop_lsb, position::board::Board, constants::{BISHOP, KNIGHT, QUEEN, ROOK}};
 
 pub fn score_mobility(board: &Board, color: usize) -> i32 {
     let pieces = board.get_pieces(color);

@@ -2,7 +2,7 @@ use uci::uci_interpreter::UciController;
 
 pub mod attacks;
 pub mod bitboard_helpers;
-pub mod board;
+pub mod position;
 pub mod constants;
 pub mod evaluation;
 pub mod fen_parsing;

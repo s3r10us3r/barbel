@@ -1,6 +1,6 @@
 use crate::{
-    board::{board::Board, zobrist_hashing::ZobristHasher},
-    fen_parsing::fen_parsing::{parse_fen, FenError},
+    position::{board::Board, zobrist_hashing::ZobristHasher},
+    fen_parsing::parse_fen::{parse_fen, FenError},
     moving::move_generation::{generate_moves, MoveList},
     search::alpha_beta::Searcher,
 };

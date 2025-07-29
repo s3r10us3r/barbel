@@ -4,7 +4,7 @@ use self::phase::get_phase_val;
 use self::piece_squares::score_piece_squares;
 use self::piece_values::evaluate_pieces;
 
-use crate::board::board::Board;
+use crate::position::board::Board;
 mod board_state;
 mod piece_values;
 mod pawn_structure;
