@@ -1,8 +1,6 @@
 use std::ops::Index;
 
 use crate::attacks::diagonal_attacks_from;
-use crate::attacks::map_negative_ray_attacks;
-use crate::attacks::map_positive_ray_attacks;
 use crate::attacks::orthogonal_attacks_from;
 use crate::bitboard_helpers::get_lsb;
 use crate::bitboard_helpers::has_more_than_one;
@@ -30,7 +28,7 @@ fn gen_evasions(move_list: &mut MoveList, board: &Board) {
     let us_piece_set = board.get_pieces(board.us);
     let enemy_piece_set = board.get_pieces(board.enemy);
     let occ = board.get_occupancy();
-    move_list.gen_king_moves(us_piece_set.get_king(), enemy_piece_set.get_all(), occ);
+    move_list.gen_king_moves(&board.lookup_holder, us_piece_set.get_king(), enemy_piece_set.get_all(), occ);
     for i in (0..move_list.get_count()).rev() {
         let mv = &move_list[i];
         if !board.is_king_move_legal(mv) {
@@ -47,16 +45,16 @@ fn gen_checked(move_list: &mut MoveList, board: &Board, checker: u64) {
     let checker_sq = get_lsb(&checker);
     let mut target_mask = checker;
     if (enemy_piece_set.get_diagonals() | enemy_piece_set.get_orthogonals()) & checker != 0 {
-        target_mask |= BB_BETWEEN[king_sq][checker_sq];
+        target_mask |= board.lookup_holder.get_bb_between(king_sq, checker_sq);
     }
     let enemy_mask = enemy_piece_set.get_all();
     let occupancy = board.get_occupancy();
     move_list.gen_pawn_moves(us_piece_set.get_pawns(), enemy_mask, occupancy, board.us);
-    move_list.gen_orthogonal_moves(us_piece_set.get_orthogonals(), enemy_mask, occupancy);
-    move_list.gen_diagonal_moves(us_piece_set.get_diagonals(), enemy_mask, occupancy);
-    move_list.gen_knight_moves(us_piece_set.get_knights(), enemy_mask, occupancy);
+    move_list.gen_orthogonal_moves(&board.lookup_holder, us_piece_set.get_orthogonals(), enemy_mask, occupancy);
+    move_list.gen_diagonal_moves(&board.lookup_holder, us_piece_set.get_diagonals(), enemy_mask, occupancy);
+    move_list.gen_knight_moves(&board.lookup_holder, us_piece_set.get_knights(), enemy_mask, occupancy);
     move_list.gen_en_passant(board.us, us_piece_set.get_pawns(), board);
-    move_list.gen_king_moves(king, enemy_mask, occupancy);
+    move_list.gen_king_moves(&board.lookup_holder, king, enemy_mask, occupancy);
     filter_illegal_moves_when_check(move_list, board, target_mask, checker);
 }
 
@@ -78,7 +76,7 @@ fn filter_illegal_moves(move_list: &mut MoveList, board: &Board) {
             && !board.is_legal(mv)
         {
             move_list.remove(i);
-        }
+        } 
     }
 }
 
@@ -111,10 +109,10 @@ fn gen_pseudo_legal_moves(move_list: &mut MoveList, board: &Board) {
     let enemy_mask = enemy_piece_set.get_all();
     let occupancy = board.get_occupancy();
     move_list.gen_pawn_moves(us_piece_set.get_pawns(), enemy_mask, occupancy, board.us);
-    move_list.gen_orthogonal_moves(us_piece_set.get_orthogonals(), enemy_mask, occupancy);
-    move_list.gen_diagonal_moves(us_piece_set.get_diagonals(), enemy_mask, occupancy);
-    move_list.gen_knight_moves(us_piece_set.get_knights(), enemy_mask, occupancy);
-    move_list.gen_king_moves(us_piece_set.get_king(), enemy_mask, occupancy);
+    move_list.gen_orthogonal_moves(&board.lookup_holder, us_piece_set.get_orthogonals(), enemy_mask, occupancy);
+    move_list.gen_diagonal_moves(&board.lookup_holder, us_piece_set.get_diagonals(), enemy_mask, occupancy);
+    move_list.gen_knight_moves(&board.lookup_holder, us_piece_set.get_knights(), enemy_mask, occupancy);
+    move_list.gen_king_moves(&board.lookup_holder, us_piece_set.get_king(), enemy_mask, occupancy);
     if board.get_state().can_castle_kingside(board.us) {
         move_list.gen_kingside_castle(board.us, occupancy);
     }
@@ -131,14 +129,14 @@ fn get_pinned(board: &Board) -> u64 {
     let allies = us_piece_set.get_all();
     let enemies = enemy_piece_set.get_all();
 
-    let mut snipers = (orthogonal_attacks_from(king_bb, enemies)
+    let mut snipers = (orthogonal_attacks_from(&board.lookup_holder, king_bb, enemies)
         & enemy_piece_set.get_orthogonals())
-        | (diagonal_attacks_from(king_bb, enemies) & enemy_piece_set.get_diagonals());
+        | (diagonal_attacks_from(&board.lookup_holder, king_bb, enemies) & enemy_piece_set.get_diagonals());
     let king_i = get_lsb(&king_bb);
     let mut pinns = 0;
     while snipers != 0 {
         let snip_sq = pop_lsb(&mut snipers) as usize;
-        pinns |= BB_BETWEEN[king_i][snip_sq] & allies;
+        pinns |= board.lookup_holder.get_bb_between(king_i, snip_sq) & allies;
     }
     pinns
 }
@@ -327,10 +325,10 @@ impl MoveList {
         }
     }
 
-    fn gen_knight_moves(&mut self, mut knights: u64, enemy_mask: u64, occupancy: u64) {
+    fn gen_knight_moves(&mut self, lookup_holder: &LookupHolder, mut knights: u64, enemy_mask: u64, occupancy: u64) {
         while knights != 0 {
             let start = knights.trailing_zeros() as usize;
-            let move_mask = KNIGHT_LOOKUP[start];
+            let move_mask = lookup_holder.get_knight_attacks(start);
             let quiet_mask = move_mask & !occupancy;
             let capture_mask = move_mask & enemy_mask;
             self.add_quiet_moves_from_mask(start as u16, quiet_mask);
@@ -339,65 +337,36 @@ impl MoveList {
         }
     }
 
-    fn gen_orthogonal_moves(&mut self, mut orthogonals: u64, enemy_mask: u64, occupancy: u64) {
+    fn gen_orthogonal_moves(&mut self, lookup_holder: &LookupHolder, mut orthogonals: u64, enemy_mask: u64, occupancy: u64) {
         while orthogonals != 0 {
             let start = pop_lsb(&mut orthogonals);
-            self.gen_positive_ray_moves(start, enemy_mask, occupancy, N8);
-            self.gen_positive_ray_moves(start, enemy_mask, occupancy, E8);
-            self.gen_negative_ray_moves(start, enemy_mask, occupancy, S8);
-            self.gen_negative_ray_moves(start, enemy_mask, occupancy, W8);
+            let attack_mask = lookup_holder.get_rook_attacks(start, occupancy);
+            self.gen_ray_moves(start, attack_mask, occupancy, enemy_mask);
         }
     }
 
-    fn gen_diagonal_moves(&mut self, mut diagonals: u64, enemy_mask: u64, occupancy: u64) {
+    fn gen_diagonal_moves(&mut self, lookup_holder: &LookupHolder, mut diagonals: u64, enemy_mask: u64, occupancy: u64) {
         while diagonals != 0 {
             let start = pop_lsb(&mut diagonals);
-            self.gen_positive_ray_moves(start, enemy_mask, occupancy, NW8);
-            self.gen_positive_ray_moves(start, enemy_mask, occupancy, NE8);
-            self.gen_negative_ray_moves(start, enemy_mask, occupancy, SW8);
-            self.gen_negative_ray_moves(start, enemy_mask, occupancy, SE8);
+            let attack_mask = lookup_holder.get_bishop_attacks(start, occupancy);
+            self.gen_ray_moves(start, attack_mask, occupancy, enemy_mask);
         }
     }
 
-    fn gen_king_moves(&mut self, king: u64, enemy_mask: u64, occupancy: u64) {
+    fn gen_king_moves(&mut self, lookup_holder: &LookupHolder, king: u64, enemy_mask: u64, occupancy: u64) {
         let start = king.trailing_zeros() as usize;
-        let move_mask = KING_LOOKUP[start];
+        let move_mask = lookup_holder.get_king_attacks(start);
         let quiet_mask = move_mask & !occupancy;
         let capture_mask = move_mask & enemy_mask;
         self.add_quiet_moves_from_mask(start as u16, quiet_mask);
         self.add_capture_moves_from_mask(start as u16, capture_mask);
     }
 
-    fn gen_positive_ray_moves(
-        &mut self,
-        start: usize,
-        enemy_mask: u64,
-        occupancy: u64,
-        dir8: usize,
-    ) {
-        let attack_mask = map_positive_ray_attacks(start, occupancy, dir8);
-        self.gen_ray_moves(start, attack_mask, occupancy, enemy_mask);
-    }
-
-    fn gen_negative_ray_moves(
-        &mut self,
-        start: usize,
-        enemy_mask: u64,
-        occupancy: u64,
-        dir8: usize,
-    ) {
-        let attack_mask = map_negative_ray_attacks(start, occupancy, dir8);
-        self.gen_ray_moves(start, attack_mask, occupancy, enemy_mask);
-    }
-
     fn gen_ray_moves(&mut self, start: usize, attack_mask: u64, occupancy: u64, enemy_mask: u64) {
         let quiet_mask = attack_mask & !occupancy;
         self.add_quiet_moves_from_mask(start as u16, quiet_mask);
         let capture_mask = attack_mask & enemy_mask;
-        if capture_mask != 0 {
-            let target = capture_mask.trailing_zeros();
-            self.push_move(Move::new_capture(start as u16, target as u16));
-        }
+        self.add_capture_moves_from_mask(start as u16, capture_mask);
     }
 
     fn add_quiet_moves_from_mask(&mut self, start: u16, mut mask: u64) {
@@ -410,7 +379,8 @@ impl MoveList {
     fn add_capture_moves_from_mask(&mut self, start: u16, mut mask: u64) {
         while mask != 0 {
             let target = pop_lsb(&mut mask) as u16;
-            self.push_move(Move::new_capture(start, target));
+            let mv = Move::new_capture(start, target);
+            self.push_move(mv);
         }
     }
 }

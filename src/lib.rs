@@ -11,6 +11,7 @@ pub mod moving;
 pub mod search;
 pub mod uci;
 pub mod tests;
+pub mod attack_mapper;
 
 
 pub fn run() {

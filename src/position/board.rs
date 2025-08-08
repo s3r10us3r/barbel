@@ -1,8 +1,9 @@
-use crate::constants::{BLACK, WHITE};
+use crate::{constants::{BLACK, WHITE}, lookups::LookupHolder};
 
 use super::{board_state::BoardState, piece_set::PieceSet, zobrist_hashing::ZobristHasher};
 
 pub struct Board {
+    pub lookup_holder: LookupHolder,
     pub players: [PieceSet; 2],
     pub us: usize,
     pub enemy: usize,
@@ -17,6 +18,7 @@ pub struct Board {
 impl Board {
     pub fn new(hasher: ZobristHasher) -> Board {
         Board {
+            lookup_holder: LookupHolder::new(),
             players: [PieceSet::new(BLACK), PieceSet::new(WHITE)],
             us: WHITE,
             hasher,
