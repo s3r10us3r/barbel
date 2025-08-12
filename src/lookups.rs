@@ -2,6 +2,8 @@ use crate::lookups::{magics::*, simple_lookups::{BB_BETWEEN, KING_LOOKUP, KNIGHT
 
 mod magics;
 mod simple_lookups;
+mod pawn_move_gen;
+mod legality;
 
 pub const N8: usize = 0;
 pub const NE8: usize = 1;
@@ -16,8 +18,7 @@ pub const NW8: usize = 7;
 
 pub struct LookupHolder {
     rook_lookup: Vec<Vec<u64>>,
-    bishop_lookup: Vec<Vec<u64>>,
-}
+    bishop_lookup: Vec<Vec<u64>>, }
 
 impl LookupHolder {
     pub fn new() -> Self {

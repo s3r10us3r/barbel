@@ -10,6 +10,7 @@ use crate::constants::*;
 use crate::lookups::*;
 use crate::moving::mv::Move;
 
+
 pub fn generate_moves(board: &Board) -> MoveList {
     let mut move_list = MoveList::new();
     move_list.reset();
@@ -40,6 +41,7 @@ fn gen_evasions(move_list: &mut MoveList, board: &Board) {
 fn gen_checked(move_list: &mut MoveList, board: &Board, checker: u64) {
     let enemy_piece_set = board.get_pieces(board.enemy);
     let us_piece_set = board.get_pieces(board.us);
+
     let king = us_piece_set.get_king();
     let king_sq = get_lsb(&king);
     let checker_sq = get_lsb(&checker);
@@ -172,7 +174,7 @@ impl MoveList {
         &mut self.moves
     }
 
-    fn push_move(&mut self, mv: Move) {
+    pub fn push_move(&mut self, mv: Move) {
         self.moves[self.count] = mv;
         self.count += 1;
     }
@@ -401,6 +403,24 @@ impl<'a> Iterator for Iter<'a> {
         } else {
             None
         }
+    }
+}
+
+impl <'a> DoubleEndedIterator for Iter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index > 0 {
+            let res = &self.moves[self.index];
+            self.index -= 1;
+            Some(res)
+        } else {
+            None
+        }
+    }
+}
+
+impl <'a> ExactSizeIterator for Iter<'a> {
+    fn len(&self) -> usize {
+        self.moves.len() - self.index
     }
 }
 

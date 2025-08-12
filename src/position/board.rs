@@ -71,12 +71,26 @@ impl Board {
         self.us = color;
     }
 
-    #[inline]
     pub fn get_pieces(&self, color: usize) -> &PieceSet {
         &self.players[color]
     }
 
-    #[inline]
+    #[inline(always)]
+    pub fn get_ally_pieces(&self) -> &PieceSet {
+        &self.players[self.us]
+    }
+
+    #[inline(always)]
+    pub fn get_enemy_pieces(&self) -> &PieceSet {
+        &self.players[self.enemy]
+    }
+
+    #[inline(always)]
+    pub fn get_piecesets(&self) -> (&PieceSet, &PieceSet) {
+        (self.get_ally_pieces(), self.get_enemy_pieces())
+    }
+
+    #[inline(always)]
     pub fn get_occupancy(&self) -> u64 {
         self.occ
     }
