@@ -1,7 +1,7 @@
 use crate::lookups::{magics::*, simple_lookups::{BB_BETWEEN, KING_LOOKUP, KNIGHT_LOOKUP, PAWN_ATTACKS_TO}};
 
 mod magics;
-mod simple_lookups;
+pub mod simple_lookups;
 mod pawn_move_gen;
 mod legality;
 

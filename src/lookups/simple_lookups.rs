@@ -10,7 +10,7 @@ impl MoveGenerator {
         Self { rook_lookup: compute_rook_lookup(), bishop_lookup: compute_bishop_lookup() }
     }
 
-    pub fn generate_moves(&self, board: &Board) {
+    pub fn generate_moves(&self, board: &Board) -> MoveList {
         let mut move_list = MoveList::new();
         let checkers = board.get_checkers();
         if checkers == 0 {
@@ -20,6 +20,7 @@ impl MoveGenerator {
         } else {
             self.gen_checked(&mut move_list, board, checkers);
         }
+        move_list
     }
 
     fn gen_legal_moves(&self, move_list: &mut MoveList, board: &Board) {
@@ -39,6 +40,8 @@ impl MoveGenerator {
             self.gen_queenside_castle(move_list,board.us, occ);
         }
         self.gen_en_passant(move_list, board);
+
+        self.filter_illegal_moves(move_list, board);
     }
 
     fn gen_evasions(&self, move_list: &mut MoveList, board: &Board) {
@@ -293,4 +296,66 @@ const fn compute_between_bb_lookup() -> [[u64; 64]; 64] {
         i += 1;
     }
     result
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::{fen_parsing::parse_fen::parse_fen, lookups::simple_lookups::MoveGenerator};
+
+
+    #[test]
+    fn should_have_correct_move_count_in_starting_position() {
+        should_have_correct_move_count_in_pos(
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            20,
+        );
+    }
+
+    #[test]
+    fn should_have_correct_move_count_in_kiwipete_position() {
+        should_have_correct_move_count_in_pos(
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            48,
+        );
+    }
+
+    #[test]
+    fn should_have_correct_move_count_in_position_3() {
+        should_have_correct_move_count_in_pos("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1 ", 14);
+    }
+
+    #[test]
+    fn should_have_correct_move_count_in_position_4() {
+        should_have_correct_move_count_in_pos(
+            "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+            6,
+        );
+    }
+
+    #[test]
+    fn should_have_correct_move_count_in_position_5() {
+        should_have_correct_move_count_in_pos(
+            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+            44,
+        );
+    }
+
+    #[test]
+    fn should_have_correct_move_count_in_position_6() {
+        should_have_correct_move_count_in_pos(
+            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
+            46,
+        );
+    }
+
+    fn should_have_correct_move_count_in_pos(pos: &str, expected_count: usize) {
+        let board = parse_fen(pos).unwrap();
+        let move_gen = MoveGenerator::new();
+        let move_list = move_gen.generate_moves(&board);
+        for i in 0..move_list.get_count() {
+            println!("{}", move_list[i].to_str());
+        }
+        assert_eq!(move_list.get_count(), expected_count);
+    }
 }

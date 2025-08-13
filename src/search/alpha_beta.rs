@@ -4,6 +4,7 @@ use std::thread;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
+use crate::lookups::simple_lookups::MoveGenerator;
 use crate::search::transposition::TTEntryType;
 use crate::{
     position::board::Board, constants::WHITE, evaluation::evaluate, 
@@ -20,6 +21,7 @@ const INFINITY: i32 = 10_000_000;
 const MATE: i32 = 1_000_000;
 
 pub struct Searcher {
+    move_gen: MoveGenerator,
     ttable: TTable,
     pv_table: PvTable,
     search_depth: i32,
@@ -27,12 +29,13 @@ pub struct Searcher {
     nodes_searched: i32,
     max_depth: i32,
     generation: i32,
-    stop: Arc<AtomicBool>
+    stop: Arc<AtomicBool>,
 }
 
 impl Default for Searcher {
     fn default() -> Self {
         Searcher {
+            move_gen: MoveGenerator::new(),
             ttable: TTable::new(),
             pv_table: PvTable::new(2), //the size is arbitrary it gets overriden on new search
             search_depth: 0,
@@ -154,7 +157,7 @@ impl Searcher {
         }
 
 
-        let mut moves = generate_moves(board);
+        let mut moves = self.move_gen.generate_moves(board);
         self.order_moves(&mut moves, depth);
         if moves.get_count() == 0 {
            return if board.is_check() { -MATE+depth } else { 0 }
@@ -200,7 +203,7 @@ impl Searcher {
             self.max_depth = depth;
         }
         self.nodes_searched += 1;
-        let moves = generate_moves(board);
+        let moves = self.move_gen.generate_moves(board);
         if moves.get_count() == 0 {
             if board.is_check() {
                 return -MATE+depth;

@@ -15,14 +15,36 @@ impl MoveGenerator {
         };
         for i in (0..move_list.get_count()).rev() {
             let mv = move_list.get_move(i);
-            if (mv.get_start_bb() & king != 0 && !board.is_king_move_legal(mv)) 
-            || (mv.is_en_passant() && !board.is_en_passant_legal_when_check(mv, checker)) 
-            || (mv.get_target_bb() & target_mask == 0 || !board.is_normal_move_legal(mv, king)) {
+            if mv.get_start_bb() & king != 0 {
+                if !board.is_king_move_legal(mv) {
+                    move_list.remove(i);
+                }
+            } else if mv.is_en_passant() {
+                if !board.is_en_passant_legal_when_check(mv, checker) {
+                    move_list.remove(i);
+                }
+            } else if mv.get_target_bb() & target_mask == 0 || !board.is_normal_move_legal(mv, king) {
                 move_list.remove(i);
             }
         }
     }
 
+    pub fn filter_illegal_moves(&self, move_list: &mut MoveList, board: &Board) {
+        let pinns = self.get_pinned(board);
+        let king = board.get_pieces(board.us).get_king();
+        for i in (0..move_list.get_count()).rev() {
+            let mv = &move_list[i];
+            if (mv.is_en_passant()
+                || mv.is_kingside_castle()
+                || mv.is_queenside_castle()
+                || mv.get_start_bb() & pinns != 0
+                || mv.get_start_bb() & king != 0)
+                && !board.is_legal(mv)
+            {
+                move_list.remove(i);
+            } 
+        }
+    }
 
     fn get_pinned(&self, board: &Board) -> u64 {
         let us_piece_set = board.get_pieces(board.us);

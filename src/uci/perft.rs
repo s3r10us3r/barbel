@@ -1,8 +1,7 @@
 use std::time::Instant;
 
 use crate::{
-    position::board::Board,
-    moving::move_generation::generate_moves,
+    lookups::simple_lookups::MoveGenerator, moving::{move_generation::generate_moves, mv::Move}, position::board::Board
 };
 
 pub struct PerftResult {
@@ -11,14 +10,16 @@ pub struct PerftResult {
 }
 
 pub fn make_perft(depth: i32, board: &mut Board) -> PerftResult {
+    let move_gen = MoveGenerator::new();
+
     let start = Instant::now();
     let mut result = 0;
-    let mv_list = generate_moves(board);
+    let mv_list = move_gen.generate_moves(board);
     let count = mv_list.get_count();
     for i in 0..count {
         let mv = &mv_list[i];
         board.make_move(mv);
-        let mv_result = test_perft(board, depth - 1);
+        let mv_result = test_perft(board, depth - 1, &move_gen);
         result += mv_result;
         board.unmake_move(mv);
         println!("{}: {}", mv.to_str(), mv_result);
@@ -27,11 +28,11 @@ pub fn make_perft(depth: i32, board: &mut Board) -> PerftResult {
     PerftResult { time, result }
 }
 
-fn test_perft(board: &mut Board, depth_left: i32) -> usize {
+fn test_perft(board: &mut Board, depth_left: i32, move_gen: &MoveGenerator) -> usize {
     if depth_left == 0 {
         return 1;
     }
-    let new_move_list = generate_moves(board);
+    let new_move_list = move_gen.generate_moves(board);
     if depth_left <= 1 {
         return new_move_list.get_count();
     }
@@ -40,7 +41,7 @@ fn test_perft(board: &mut Board, depth_left: i32) -> usize {
     while i < new_move_list.get_count() {
         let mv = &new_move_list[i];
         board.make_move(mv);
-        let mv_res = test_perft(board, depth_left - 1);
+        let mv_res = test_perft(board, depth_left - 1, move_gen);
         result += mv_res;
         board.unmake_move(mv);
         i += 1;
