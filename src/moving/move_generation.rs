@@ -1,240 +1,130 @@
-use std::ops::Index;
-
-use crate::attacks::diagonal_attacks_from;
-use crate::attacks::orthogonal_attacks_from;
-use crate::bitboard_helpers::get_lsb;
-use crate::bitboard_helpers::has_more_than_one;
-use crate::bitboard_helpers::pop_lsb;
-use crate::position::board::Board;
+use crate::bitboard_helpers::{get_lsb, has_more_than_one, pop_lsb};
 use crate::constants::*;
-use crate::lookups::*;
+use crate::moving::magics::*;
+use crate::moving::move_list::MoveList;
+use crate::position::board::Board;
 use crate::moving::mv::Move;
 
-
-pub fn generate_moves(board: &Board) -> MoveList {
-    let mut move_list = MoveList::new();
-    move_list.reset();
-    let checkers = board.get_checkers();
-    if checkers == 0 {
-        gen_legal_moves(&mut move_list, board);
-    } else if has_more_than_one(checkers) {
-        gen_evasions(&mut move_list, board);
-    } else {
-        gen_checked(&mut move_list, board, checkers);
-    }
-    move_list
+pub struct MoveGenerator {
+    rook_lookup: Vec<Vec<u64>>,
+    bishop_lookup: Vec<Vec<u64>>,
 }
 
-fn gen_evasions(move_list: &mut MoveList, board: &Board) {
-    let us_piece_set = board.get_pieces(board.us);
-    let enemy_piece_set = board.get_pieces(board.enemy);
-    let occ = board.get_occupancy();
-    move_list.gen_king_moves(&board.lookup_holder, us_piece_set.get_king(), enemy_piece_set.get_all(), occ);
-    for i in (0..move_list.get_count()).rev() {
-        let mv = &move_list[i];
-        if !board.is_king_move_legal(mv) {
-            move_list.remove(i);
+impl Default for MoveGenerator {
+    fn default() -> Self { Self::new() }
+}
+
+impl MoveGenerator {
+    pub fn new() -> Self {
+        Self { rook_lookup: compute_rook_lookup(), bishop_lookup: compute_bishop_lookup() }
+    }
+
+    pub fn generate_moves(&self, board: &Board) -> MoveList {
+        let mut move_list = MoveList::new();
+        let checkers = board.get_checkers();
+        if checkers == 0 {
+            self.gen_legal_moves(&mut move_list, board);
+        } else if has_more_than_one(checkers) {
+            self.gen_evasions(&mut move_list, board);
+        } else {
+            self.gen_checked(&mut move_list, board, checkers);
         }
+        move_list
     }
-}
 
-fn gen_checked(move_list: &mut MoveList, board: &Board, checker: u64) {
-    let enemy_piece_set = board.get_pieces(board.enemy);
-    let us_piece_set = board.get_pieces(board.us);
+    fn gen_legal_moves(&self, move_list: &mut MoveList, board: &Board) {
+        let (us, enemy) = board.get_piecesets();
+        let enemy_mask = enemy.get_all();
+        let occ= board.get_occupancy();
 
-    let king = us_piece_set.get_king();
-    let king_sq = get_lsb(&king);
-    let checker_sq = get_lsb(&checker);
-    let mut target_mask = checker;
-    if (enemy_piece_set.get_diagonals() | enemy_piece_set.get_orthogonals()) & checker != 0 {
-        target_mask |= board.lookup_holder.get_bb_between(king_sq, checker_sq);
+        self.gen_pawn_moves(move_list, board);
+        self.gen_orthogonal_moves(move_list, us.get_orthogonals(), enemy_mask, occ);
+        self.gen_diagonal_moves(move_list, us.get_diagonals(), enemy_mask, occ);
+        self.gen_knight_moves(move_list, us.get_knights(), occ, enemy_mask);
+        self.gen_king_moves(move_list, us.get_king(), enemy_mask, occ);
+        if board.get_state().can_castle_kingside(board.us) {
+            self.gen_kingside_castle(move_list, board.us, occ);
+        }
+        if board.get_state().can_castle_queenside(board.us) {
+            self.gen_queenside_castle(move_list,board.us, occ);
+        }
+        self.gen_en_passant(move_list, board);
+
+        self.filter_illegal_moves(move_list, board);
     }
-    let enemy_mask = enemy_piece_set.get_all();
-    let occupancy = board.get_occupancy();
-    move_list.gen_pawn_moves(us_piece_set.get_pawns(), enemy_mask, occupancy, board.us);
-    move_list.gen_orthogonal_moves(&board.lookup_holder, us_piece_set.get_orthogonals(), enemy_mask, occupancy);
-    move_list.gen_diagonal_moves(&board.lookup_holder, us_piece_set.get_diagonals(), enemy_mask, occupancy);
-    move_list.gen_knight_moves(&board.lookup_holder, us_piece_set.get_knights(), enemy_mask, occupancy);
-    move_list.gen_en_passant(board.us, us_piece_set.get_pawns(), board);
-    move_list.gen_king_moves(&board.lookup_holder, king, enemy_mask, occupancy);
-    filter_illegal_moves_when_check(move_list, board, target_mask, checker);
-}
 
-fn gen_legal_moves(move_list: &mut MoveList, board: &Board) {
-    gen_pseudo_legal_moves(move_list, board);
-    filter_illegal_moves(move_list, board);
-}
+    fn gen_evasions(&self, move_list: &mut MoveList, board: &Board) {
+        let us = board.get_pieces(board.us);
+        let enemy = board.get_pieces(board.enemy);
+        let occ = board.get_occupancy();
 
-fn filter_illegal_moves(move_list: &mut MoveList, board: &Board) {
-    let pinns = get_pinned(board);
-    let king = board.get_pieces(board.us).get_king();
-    for i in (0..move_list.get_count()).rev() {
-        let mv = &move_list[i];
-        if (mv.is_en_passant()
-            || mv.is_kingside_castle()
-            || mv.is_queenside_castle()
-            || mv.get_start_bb() & pinns != 0
-            || mv.get_start_bb() & king != 0)
-            && !board.is_legal(mv)
-        {
-            move_list.remove(i);
-        } 
-    }
-}
-
-fn filter_illegal_moves_when_check(
-    move_list: &mut MoveList,
-    board: &Board,
-    target_mask: u64,
-    checker: u64,
-) {
-    let king = board.get_pieces(board.us).get_king();
-    for i in (0..move_list.get_count()).rev() {
-        let mv = &move_list[i];
-        if mv.get_start_bb() & king != 0 {
+        self.gen_king_moves(move_list, us.get_king(), enemy.get_all(), occ);
+        for i in (0..move_list.get_count()).rev() {
+            let mv = &move_list[i];
             if !board.is_king_move_legal(mv) {
                 move_list.remove(i);
             }
-        } else if mv.is_en_passant() {
-            if !board.is_en_passant_legal_when_check(mv, checker) {
-                move_list.remove(i);
-            }
-        } else if mv.get_target_bb() & target_mask == 0 || !board.is_normal_move_legal(mv, king) {
-            move_list.remove(i);
-        }
-    }
-}
-
-fn gen_pseudo_legal_moves(move_list: &mut MoveList, board: &Board) {
-    let us_piece_set = board.get_pieces(board.us);
-    let enemy_piece_set = board.get_pieces(board.enemy);
-    let enemy_mask = enemy_piece_set.get_all();
-    let occupancy = board.get_occupancy();
-    move_list.gen_pawn_moves(us_piece_set.get_pawns(), enemy_mask, occupancy, board.us);
-    move_list.gen_orthogonal_moves(&board.lookup_holder, us_piece_set.get_orthogonals(), enemy_mask, occupancy);
-    move_list.gen_diagonal_moves(&board.lookup_holder, us_piece_set.get_diagonals(), enemy_mask, occupancy);
-    move_list.gen_knight_moves(&board.lookup_holder, us_piece_set.get_knights(), enemy_mask, occupancy);
-    move_list.gen_king_moves(&board.lookup_holder, us_piece_set.get_king(), enemy_mask, occupancy);
-    if board.get_state().can_castle_kingside(board.us) {
-        move_list.gen_kingside_castle(board.us, occupancy);
-    }
-    if board.get_state().can_castle_queenside(board.us) {
-        move_list.gen_queenside_castle(board.us, occupancy);
-    }
-    move_list.gen_en_passant(board.us, us_piece_set.get_pawns(), board);
-}
-
-fn get_pinned(board: &Board) -> u64 {
-    let us_piece_set = board.get_pieces(board.us);
-    let enemy_piece_set = board.get_pieces(board.enemy);
-    let king_bb = us_piece_set.get_king();
-    let allies = us_piece_set.get_all();
-    let enemies = enemy_piece_set.get_all();
-
-    let mut snipers = (orthogonal_attacks_from(&board.lookup_holder, king_bb, enemies)
-        & enemy_piece_set.get_orthogonals())
-        | (diagonal_attacks_from(&board.lookup_holder, king_bb, enemies) & enemy_piece_set.get_diagonals());
-    let king_i = get_lsb(&king_bb);
-    let mut pinns = 0;
-    while snipers != 0 {
-        let snip_sq = pop_lsb(&mut snipers) as usize;
-        pinns |= board.lookup_holder.get_bb_between(king_i, snip_sq) & allies;
-    }
-    pinns
-}
-
-pub struct MoveList {
-    moves: [Move; 218],
-    count: usize,
-}
-
-impl Default for MoveList {
-    fn default() -> Self {
-        MoveList {
-            moves: std::array::from_fn(|_| Move::new_null_mv()),
-            count: 0,
-        }
-    }
-}
-
-impl Index<usize> for MoveList {
-    type Output = Move;
-
-    fn index(&self, i: usize) -> &Self::Output {
-        &self.moves[i]
-    }
-}
-
-impl MoveList {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn moves(&mut self) -> &mut [Move] {
-        &mut self.moves
-    }
-
-    pub fn push_move(&mut self, mv: Move) {
-        self.moves[self.count] = mv;
-        self.count += 1;
-    }
-
-    pub fn reset(&mut self) {
-        self.count = 0;
-    }
-
-    pub fn remove(&mut self, i: usize) {
-        self.count -= 1;
-        self.moves.swap(self.count, i);
-    }
-
-    pub fn get_count(&self) -> usize {
-        self.count
-    }
-
-    pub fn get_move(&self, i: usize) -> &Move {
-        &self.moves[i]
-    }
-
-    fn gen_queenside_castle(&mut self, color: usize, occ: u64) {
-        let king_start: u16;
-        let king_target: u16;
-        let castle_mask: u64;
-        if color == WHITE {
-            king_start = 4;
-            king_target = 2;
-            castle_mask = QUEENSIDE_CATLE_MASK;
-        } else {
-            king_start = 4 + 56;
-            king_target = 2 + 56;
-            castle_mask = QUEENSIDE_CATLE_MASK << 56;
-        }
-        if occ & castle_mask == 0 {
-            self.push_move(Move::new_queenside_castle(king_start, king_target));
         }
     }
 
-    fn gen_en_passant(&mut self, color: usize, pawns: u64, board: &Board) {
-        let file = board.get_state().get_en_passant_file();
-        if file == 0 {
-            return;
+    fn gen_checked(&self, move_list: &mut MoveList, board: &Board, checker: u64) {
+        let (us, enemy) = board.get_piecesets();
+        let king = us.get_king();
+        let enemy_mask = enemy.get_all();
+        let occ = board.get_occupancy();
+        self.gen_pawn_moves(move_list, board);
+        self.gen_orthogonal_moves(move_list, us.get_orthogonals(), enemy_mask, occ);
+        self.gen_diagonal_moves(move_list, us.get_diagonals(), enemy_mask, occ);
+        self.gen_en_passant(move_list, board);
+        self.gen_knight_moves(move_list, us.get_knights(), occ, enemy_mask);
+        self.gen_king_moves(move_list, king, enemy_mask, occ);
+        self.filter_illegal_moves_when_check(move_list, board, checker);
+    }
+
+    fn gen_knight_moves(&self, move_list: &mut MoveList, mut knights: u64, occ: u64, enemy_mask: u64) {
+        while knights != 0 {
+            let start = pop_lsb(&mut knights);
+            let attacks = self.get_knight_attacks(start);
+            let quiet_mask = attacks & !occ;
+            let capture_mask = attacks & enemy_mask;
+            self.add_quiet_moves(move_list, start, quiet_mask);
+            self.add_capture_moves(move_list, start, capture_mask);
         }
-        let file = file - 1;
-        let (cap_sq, target_sq) = if color == WHITE {
-            (32 + file, 40 + file)
-        } else {
-            (24 + file, 16 + file)
-        };
-        let cap_mask: u64 = 1 << cap_sq;
-        let pawn_mask = ((cap_mask & !FILEH) << 1) | ((cap_mask & !FILEA) >> 1);
-        let mut move_mask = pawn_mask & pawns;
-        while move_mask != 0 {
-            let start_sq = pop_lsb(&mut move_mask);
-            self.push_move(Move::new_en_passant(start_sq as u16, target_sq as u16));
+    } 
+
+    fn gen_king_moves(&self, move_list: &mut MoveList, king: u64, enemy_mask: u64, occ: u64) {
+        let sq = get_lsb(&king);
+        let move_mask = self.get_king_attacks(sq);
+        let quiet_mask = move_mask & !occ;
+        let capture_mask = move_mask & enemy_mask;
+
+        self.add_quiet_moves(move_list, sq, quiet_mask);
+        self.add_capture_moves(move_list, sq, capture_mask);
+    }
+
+    fn gen_orthogonal_moves(&self, move_list: &mut MoveList, mut orthogonals: u64, enemy_mask: u64, occ: u64) {
+        while orthogonals != 0 {
+            let start = pop_lsb(&mut orthogonals);
+            let attacks_mask = self.get_rook_attacks(start, occ);
+            let quiet_mask = attacks_mask & !occ;
+            let capture_mask = attacks_mask & enemy_mask;
+            self.add_quiet_moves(move_list, start, quiet_mask);
+            self.add_capture_moves(move_list, start, capture_mask);
         }
     }
 
-    fn gen_kingside_castle(&mut self, color: usize, occ: u64) {
+    fn gen_diagonal_moves(&self, move_list: &mut MoveList, mut diagonals: u64, enemy_mask: u64, occ: u64) {
+        while diagonals != 0 {
+            let start = pop_lsb(&mut diagonals);
+            let attacks_mask = self.get_bishop_attacks(start, occ);
+            let quiet_mask = attacks_mask & !occ;
+            let capture_mask = attacks_mask & enemy_mask;
+            self.add_quiet_moves(move_list, start, quiet_mask);
+            self.add_capture_moves(move_list, start, capture_mask);
+        }
+    }
+
+    fn gen_kingside_castle(&self, move_list: &mut MoveList, color: usize, occ: u64) {
         let king_start: u16;
         let king_target: u16;
         let castle_mask: u64;
@@ -248,196 +138,370 @@ impl MoveList {
             castle_mask = KINGSIDE_CASTLE_MASK << 56;
         }
         if occ & castle_mask == 0 {
-            self.push_move(Move::new_kingside_castle(king_start, king_target));
+            move_list.push_move(Move::new_kingside_castle(king_start, king_target));
         }
     }
 
-    fn gen_pawn_moves(&mut self, mut pawns: u64, enemy_mask: u64, occupancy: u64, color: usize) {
-        while pawns != 0 {
-            let start = pop_lsb(&mut pawns) as u16;
-            let lsb_pointer = 1 << start;
-            let single_move_mask;
-            let double_move_mask;
-            let left_capture_mask;
-            let right_capture_mask;
-            let double_pawn_rank;
-            let promotion_rank;
-            if color == WHITE {
-                single_move_mask = (lsb_pointer << 8) & !occupancy;
-                double_move_mask = (lsb_pointer << 16) & !occupancy;
-                left_capture_mask = ((lsb_pointer & !FILEA) << 7) & enemy_mask;
-                right_capture_mask = ((lsb_pointer & !FILEH) << 9) & enemy_mask;
-                double_pawn_rank = 1;
-                promotion_rank = 7;
+    fn gen_queenside_castle(&self, move_list: &mut MoveList, color: usize, occ: u64) {
+        let king_start: u16;
+        let king_target: u16;
+        let castle_mask: u64;
+        if color == WHITE {
+            king_start = 4;
+            king_target = 2;
+            castle_mask = QUEENSIDE_CATLE_MASK;
+        } else {
+            king_start = 4 + 56;
+            king_target = 2 + 56;
+            castle_mask = QUEENSIDE_CATLE_MASK << 56;
+        }
+        if occ & castle_mask == 0 {
+            move_list.push_move(Move::new_queenside_castle(king_start, king_target));
+        }
+    }
+
+    #[inline(always)]
+    fn add_quiet_moves(&self, move_list: &mut MoveList, start: usize, mut mask: u64) {
+        while mask != 0 {
+            let target = pop_lsb(&mut mask);
+            let mv = Move::new_quiet(start as u16, target as u16);
+            move_list.push_move(mv);
+        }
+    }
+
+    #[inline(always)]
+    fn add_capture_moves(&self, move_list: &mut MoveList, start: usize, mut mask: u64) {
+        while mask != 0 {
+            let target = pop_lsb(&mut mask);
+            let mv = Move::new_capture(start as u16, target as u16);
+            move_list.push_move(mv);
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_knight_attacks(&self, sq: usize) -> u64 {
+        KNIGHT_LOOKUP[sq]
+    }
+
+    #[inline(always)]
+    pub fn get_king_attacks(&self, sq: usize) -> u64 {
+        KING_LOOKUP[sq]
+    }
+
+    #[inline(always)]
+    pub fn get_pawn_attacks(&self, sq: usize, color: usize) -> u64 {
+        PAWN_ATTACKS_TO[color][sq]
+    }
+
+    #[inline(always)]
+    pub fn get_rook_attacks(&self, sq: usize, occ: u64) -> u64 {
+        let bb = occ & ROOK_RELEVANCY_MASKS[sq];
+        let idx = index_magic(bb, ROOK_MAGICS[sq], ROOK_SHIFTS[sq]);
+        self.rook_lookup[sq][idx]
+    }
+
+    #[inline(always)]
+    pub fn get_bishop_attacks(&self, sq: usize, occ: u64) -> u64 {
+        let bb = occ & BISHOP_RELEVANCY_MASKS[sq];
+        let idx = index_magic(bb, BISHOP_MAGICS[sq], BISHOP_SHIFTS[sq]);
+        self.bishop_lookup[sq][idx]
+    }
+
+    pub fn get_bb_between(&self, sq1: usize, sq2: usize) -> u64 {
+        BB_BETWEEN[sq1][sq2]
+    }
+}
+
+impl MoveGenerator {
+    fn gen_pawn_moves(&self, move_list: &mut MoveList, board: &Board) {
+        let (us, enemy) = board.get_piecesets();
+        let occ = board.get_occupancy();
+        let pawns = us.get_pawns();
+        let enemies = enemy.get_all();
+        if board.us == WHITE {
+            self.generate_white_single_push(move_list, pawns, occ);
+            self.generate_white_double_push(move_list, pawns, occ);
+            self.generate_white_captures(move_list, pawns, enemies);
+        } else {
+            self.generate_black_single_push(move_list, pawns, occ);
+            self.generate_black_double_push(move_list, pawns, occ);
+            self.generate_black_captures(move_list, pawns, enemies);
+        }
+    }
+
+    fn gen_en_passant(&self, move_list: &mut MoveList, board: &Board) {
+        let file = board.get_state().get_en_passant_file();
+        if file == 0 {
+            return;
+        }
+
+        let us = board.get_ally_pieces();
+        let pawns = us.get_pawns();
+        let file = file - 1;
+        let (cap_sq, target_sq) = if board.us == WHITE {
+            (32 + file, 40 + file)
+        } else {
+            (24 + file, 16 + file)
+        };
+        let cap_mask = 1u64 << cap_sq;
+        let pawn_mask = ((cap_mask & !FILEH) << 1) | ((cap_mask & !FILEA) >> 1);
+        let mut move_mask = pawn_mask & pawns;
+        while move_mask != 0 {
+            let start_sq = pop_lsb(&mut move_mask);
+            move_list.push_move(Move::new_en_passant(start_sq as u16, target_sq as u16));
+        }
+    }
+}
+
+impl MoveGenerator {
+    #[inline(always)]
+    fn generate_white_single_push(&self, move_list: &mut MoveList, pawns: u64, occ: u64) {
+        let mut mask = (pawns << 8) & !occ;
+        let mut promotions = mask & RANK8;
+        mask &= !promotions;
+        while mask != 0 {
+            let target = pop_lsb(&mut mask);
+            let start = target - 8;
+            move_list.push_move(Move::new_quiet(start as u16, target as u16));
+        }
+        while promotions != 0 {
+            let target = pop_lsb(&mut promotions);
+            let start = target - 8;
+            self.generate_promotions(move_list, start as u16, target as u16);
+        }
+    }
+
+    #[inline(always)]
+    fn generate_white_double_push(&self, move_list: &mut MoveList, pawns: u64, occ: u64) {
+        let pawns = pawns & RANK2;
+        let mut mask = (((pawns << 8) & !occ) << 8) & !occ;
+        while mask != 0 {
+            let target = pop_lsb(&mut mask);
+            let start = target - 16;
+            move_list.push_move(Move::new_double_pawn_push(start as u16, target as u16));
+        }
+    }
+
+    #[inline(always)]
+    fn generate_white_captures(&self, move_list: &mut MoveList, pawns: u64, enemies: u64) {
+        let mut left_captures = ((pawns & !FILEA) << 7) & enemies;
+        let mut right_captures = ((pawns & !FILEH) << 9) & enemies;
+
+        let mut left_capture_promotions = left_captures & RANK8;
+        left_captures &= !left_capture_promotions;
+
+        let mut right_capture_promotions = right_captures & RANK8;
+        right_captures &= !right_capture_promotions;
+
+        while left_captures != 0 {
+            let target = pop_lsb(&mut left_captures);
+            let start = target - 7;
+            move_list.push_move(Move::new_capture(start as u16, target as u16));
+        }
+
+        while right_captures != 0 {
+            let target = pop_lsb(&mut right_captures);
+            let start = target - 9;
+            move_list.push_move(Move::new_capture(start as u16, target as u16));
+        }
+
+        while left_capture_promotions != 0 {
+            let target = pop_lsb(&mut left_capture_promotions);
+            let start = target - 7;
+            self.generate_promotion_captures(move_list, start as u16, target as u16);
+        }
+
+        while right_capture_promotions != 0 {
+            let target = pop_lsb(&mut right_capture_promotions);
+            let start = target - 9;
+            self.generate_promotion_captures(move_list, start as u16, target as u16);
+        }
+    }
+
+
+    #[inline(always)]
+    fn generate_promotions(&self, move_list: &mut MoveList, start: u16, target: u16) {
+        move_list.push_move(Move::new_promotion(start, target, QUEEN));
+        move_list.push_move(Move::new_promotion(start, target, ROOK));
+        move_list.push_move(Move::new_promotion(start, target, KNIGHT));
+        move_list.push_move(Move::new_promotion(start, target, BISHOP));
+    }
+
+    #[inline(always)]
+    fn generate_promotion_captures(&self, move_list: &mut MoveList, start: u16, target: u16) {
+        move_list.push_move(Move::new_promotion_capture(start, target, QUEEN));
+        move_list.push_move(Move::new_promotion_capture(start, target, ROOK));
+        move_list.push_move(Move::new_promotion_capture(start, target, KNIGHT));
+        move_list.push_move(Move::new_promotion_capture(start, target, BISHOP));
+    }
+}
+
+
+impl MoveGenerator {
+    #[inline(always)]
+    fn generate_black_single_push(&self, move_list: &mut MoveList, pawns: u64, occ: u64) {
+        let mut mask = (pawns >> 8) & !occ;
+        let mut promotions = mask & RANK1;
+        mask &= !promotions;
+        while mask != 0 {
+            let target = pop_lsb(&mut mask);
+            let start = target + 8;
+            move_list.push_move(Move::new_quiet(start as u16, target as u16));
+        }
+        while promotions != 0 {
+            let target = pop_lsb(&mut promotions);
+            let start = target + 8;
+            self.generate_promotions(move_list, start as u16, target as u16);
+        }
+    }
+
+    #[inline(always)]
+    fn generate_black_double_push(&self, move_list: &mut MoveList, pawns: u64, occ: u64) {
+        let pawns = pawns & RANK7;
+        let mut mask = (((pawns >> 8) & !occ) >> 8) & !occ;
+        while mask != 0 {
+            let target = pop_lsb(&mut mask);
+            let start = target + 16;
+            move_list.push_move(Move::new_double_pawn_push(start as u16, target as u16));
+        }
+    }
+
+    #[inline(always)]
+    fn generate_black_captures(&self, move_list: &mut MoveList, pawns: u64, enemies: u64) {
+        let mut left_captures = ((pawns & !FILEA) >> 9) & enemies;
+        let mut right_captures = ((pawns & !FILEH) >> 7) & enemies;
+
+        let mut left_capture_promotions = left_captures & RANK1;
+        left_captures &= !left_capture_promotions;
+
+        let mut right_capture_promotions = right_captures & RANK1;
+        right_captures &= !right_capture_promotions;
+
+        while left_captures != 0 {
+            let target = pop_lsb(&mut left_captures);
+            let start = target + 9;
+            move_list.push_move(Move::new_capture(start as u16, target as u16));
+        }
+
+        while right_captures != 0 {
+            let target = pop_lsb(&mut right_captures);
+            let start = target + 7;
+            move_list.push_move(Move::new_capture(start as u16, target as u16));
+        }
+
+        while left_capture_promotions != 0 {
+            let target = pop_lsb(&mut left_capture_promotions);
+            let start = target + 9;
+            self.generate_promotion_captures(move_list, start as u16, target as u16);
+        }
+
+        while right_capture_promotions != 0 {
+            let target = pop_lsb(&mut right_capture_promotions);
+            let start = target + 7;
+            self.generate_promotion_captures(move_list, start as u16, target as u16);
+        }
+    }
+}
+
+pub static KNIGHT_LOOKUP: [u64; 64] = compute_knight_lookup();
+pub static KING_LOOKUP: [u64; 64] = compute_king_lookup();
+pub static PAWN_ATTACKS_TO: [[u64; 64]; 2] = compute_pawn_lookup();
+pub static BB_BETWEEN: [[u64; 64]; 64] = compute_between_bb_lookup();
+
+const fn compute_knight_lookup() -> [u64; 64] {
+    let mut table = [0; 64];
+    let mut i = 0;
+    while i < 64 {
+        let bitboard: u64 = 1 << i;
+        let mut attacks: u64 = 0;
+        attacks |= (bitboard & !FILEA & !FILEB) << 6;
+        attacks |= (bitboard & !FILEA & !FILEB) >> 10;
+        attacks |= (bitboard & !FILEA) << 15;
+        attacks |= (bitboard & !FILEA) >> 17;
+        attacks |= (bitboard & !FILEG & !FILEH) << 10;
+        attacks |= (bitboard & !FILEG & !FILEH) >> 6;
+        attacks |= (bitboard & !FILEH) << 17;
+        attacks |= (bitboard & !FILEH) >> 15;
+        table[i] = attacks;
+        i += 1;
+    }
+    table
+}
+
+const fn compute_king_lookup() -> [u64; 64] {
+    let mut i = 0;
+    let mut result: [u64; 64] = [0; 64];
+    while i < 64 {
+        let king_bit = 1 << i;
+        let mut map = 0;
+        map |= (king_bit & !FILEH) << 1;
+        map |= (king_bit & !(RANK8 | FILEH)) << 9;
+        map |= (king_bit & !RANK8) << 8;
+        map |= (king_bit & !(RANK8 | FILEA)) << 7;
+
+        map |= (king_bit & !FILEA) >> 1;
+        map |= (king_bit & !(RANK1 | FILEA)) >> 9;
+        map |= (king_bit & !RANK1) >> 8;
+        map |= (king_bit & !(RANK1 | FILEH)) >> 7;
+        result[i] = map;
+        i += 1;
+    }
+    result
+}
+
+const fn compute_pawn_lookup() -> [[u64; 64]; 2] {
+    let mut result: [[u64; 64]; 2] = [[0; 64]; 2];
+    let mut i = 0;
+    while i < 64 {
+        let bb: u64 = 1 << i;
+        result[WHITE][i] = ((bb & !(FILEA | RANK1)) >> 9) | ((bb & !(FILEH | RANK1)) >> 7);
+        result[BLACK][i] = ((bb & !(FILEA | RANK8)) << 7) | ((bb & !(FILEH | RANK8)) << 9);
+        i += 1;
+    }
+    result
+}
+
+const fn compute_between_bb_lookup() -> [[u64; 64]; 64] {
+    let mut result: [[u64; 64]; 64] = [[0; 64]; 64];
+    let mut i: usize = 0;
+    while i < 64 {
+        let mut j: usize = 0;
+        while j < 64 {
+            if j == i {
+                j += 1;
+                continue;
+            }
+            let diff = if i / 8 == j / 8 {
+                1
+            } else if i % 8 == j % 8 {
+                8
+            } else if i.abs_diff(j) % 9 == 0 {
+                9
+            } else if i.abs_diff(j) % 7 == 0 {
+                7
             } else {
-                single_move_mask = (lsb_pointer >> 8) & !occupancy;
-                double_move_mask = (lsb_pointer >> 16) & !occupancy;
-                left_capture_mask = ((lsb_pointer & !FILEA) >> 9) & enemy_mask;
-                right_capture_mask = ((lsb_pointer & !FILEH) >> 7) & enemy_mask;
-                double_pawn_rank = 6;
-                promotion_rank = 0;
+                j += 1;
+                continue;
+            };
+            let (mut s, e) = if i < j { (i + diff, j) } else { (j + diff, i) };
+            let mut bb: u64 = 0;
+            while s < e {
+                bb |= 1 << s;
+                s += diff;
             }
-            if single_move_mask != 0 {
-                let target = single_move_mask.trailing_zeros() as u16;
-                if target / 8 == promotion_rank {
-                    self.gen_promotion_moves(start, target);
-                } else {
-                    let mv = Move::new_quiet(start, target);
-                    self.push_move(mv);
-                }
-                if double_move_mask != 0 && start / 8 == double_pawn_rank {
-                    let target = double_move_mask.trailing_zeros() as u16;
-                    let mv = Move::new_double_pawn_push(start, target);
-                    self.push_move(mv);
-                }
-            }
-
-            if left_capture_mask != 0 {
-                let target = left_capture_mask.trailing_zeros() as u16;
-                if target / 8 == promotion_rank {
-                    self.gen_promotion_captures(start, target);
-                } else {
-                    let mv = Move::new_capture(start, target);
-                    self.push_move(mv);
-                }
-            }
-            if right_capture_mask != 0 {
-                let target = right_capture_mask.trailing_zeros() as u16;
-                if target / 8 == promotion_rank {
-                    self.gen_promotion_captures(start, target);
-                } else {
-                    let mv = Move::new_capture(start, target);
-                    self.push_move(mv);
-                }
-            }
+            result[i][j] = bb;
+            j += 1;
         }
+        i += 1;
     }
-
-    fn gen_promotion_moves(&mut self, start: u16, target: u16) {
-        let pieces = [KNIGHT, BISHOP, ROOK, QUEEN];
-        for piece in pieces {
-            self.push_move(Move::new_promotion(start, target, piece));
-        }
-    }
-
-    fn gen_promotion_captures(&mut self, start: u16, target: u16) {
-        let pieces = [KNIGHT, BISHOP, ROOK, QUEEN];
-        for piece in pieces {
-            self.push_move(Move::new_promotion_capture(start, target, piece));
-        }
-    }
-
-    fn gen_knight_moves(&mut self, lookup_holder: &LookupHolder, mut knights: u64, enemy_mask: u64, occupancy: u64) {
-        while knights != 0 {
-            let start = knights.trailing_zeros() as usize;
-            let move_mask = lookup_holder.get_knight_attacks(start);
-            let quiet_mask = move_mask & !occupancy;
-            let capture_mask = move_mask & enemy_mask;
-            self.add_quiet_moves_from_mask(start as u16, quiet_mask);
-            self.add_capture_moves_from_mask(start as u16, capture_mask);
-            knights &= knights - 1;
-        }
-    }
-
-    fn gen_orthogonal_moves(&mut self, lookup_holder: &LookupHolder, mut orthogonals: u64, enemy_mask: u64, occupancy: u64) {
-        while orthogonals != 0 {
-            let start = pop_lsb(&mut orthogonals);
-            let attack_mask = lookup_holder.get_rook_attacks(start, occupancy);
-            self.gen_ray_moves(start, attack_mask, occupancy, enemy_mask);
-        }
-    }
-
-    fn gen_diagonal_moves(&mut self, lookup_holder: &LookupHolder, mut diagonals: u64, enemy_mask: u64, occupancy: u64) {
-        while diagonals != 0 {
-            let start = pop_lsb(&mut diagonals);
-            let attack_mask = lookup_holder.get_bishop_attacks(start, occupancy);
-            self.gen_ray_moves(start, attack_mask, occupancy, enemy_mask);
-        }
-    }
-
-    fn gen_king_moves(&mut self, lookup_holder: &LookupHolder, king: u64, enemy_mask: u64, occupancy: u64) {
-        let start = king.trailing_zeros() as usize;
-        let move_mask = lookup_holder.get_king_attacks(start);
-        let quiet_mask = move_mask & !occupancy;
-        let capture_mask = move_mask & enemy_mask;
-        self.add_quiet_moves_from_mask(start as u16, quiet_mask);
-        self.add_capture_moves_from_mask(start as u16, capture_mask);
-    }
-
-    fn gen_ray_moves(&mut self, start: usize, attack_mask: u64, occupancy: u64, enemy_mask: u64) {
-        let quiet_mask = attack_mask & !occupancy;
-        self.add_quiet_moves_from_mask(start as u16, quiet_mask);
-        let capture_mask = attack_mask & enemy_mask;
-        self.add_capture_moves_from_mask(start as u16, capture_mask);
-    }
-
-    fn add_quiet_moves_from_mask(&mut self, start: u16, mut mask: u64) {
-        while mask != 0 {
-            let target = pop_lsb(&mut mask) as u16;
-            self.push_move(Move::new_quiet(start, target));
-        }
-    }
-
-    fn add_capture_moves_from_mask(&mut self, start: u16, mut mask: u64) {
-        while mask != 0 {
-            let target = pop_lsb(&mut mask) as u16;
-            let mv = Move::new_capture(start, target);
-            self.push_move(mv);
-        }
-    }
+    result
 }
 
-pub struct Iter<'a> {
-    moves: &'a [Move],
-    index: usize,
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = &'a Move;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.moves.len() {
-            let result = &self.moves[self.index];
-            self.index += 1;
-            Some(result)
-        } else {
-            None
-        }
-    }
-}
-
-impl <'a> DoubleEndedIterator for Iter<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.index > 0 {
-            let res = &self.moves[self.index];
-            self.index -= 1;
-            Some(res)
-        } else {
-            None
-        }
-    }
-}
-
-impl <'a> ExactSizeIterator for Iter<'a> {
-    fn len(&self) -> usize {
-        self.moves.len() - self.index
-    }
-}
-
-impl MoveList {
-    pub fn iter(&self) -> Iter {
-        Iter {
-            moves: &self.moves[..self.count],
-            index: 0,
-        }
-    }
-}
 
 #[cfg(test)]
 mod test {
-    use crate::{fen_parsing::parse_fen::parse_fen};
+    use crate::{fen_parsing::parse_fen::parse_fen, moving::move_generation::MoveGenerator};
 
-    use super::generate_moves ;
 
     #[test]
     fn should_have_correct_move_count_in_starting_position() {
@@ -486,7 +550,8 @@ mod test {
 
     fn should_have_correct_move_count_in_pos(pos: &str, expected_count: usize) {
         let board = parse_fen(pos).unwrap();
-        let move_list = generate_moves(&board);
+        let move_gen = MoveGenerator::new();
+        let move_list = move_gen.generate_moves(&board);
         for i in 0..move_list.get_count() {
             println!("{}", move_list[i].to_str());
         }

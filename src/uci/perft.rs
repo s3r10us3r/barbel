@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::{
-    lookups::simple_lookups::MoveGenerator, moving::{move_generation::generate_moves, mv::Move}, position::board::Board
+    moving::move_generation::MoveGenerator, position::board::Board
 };
 
 pub struct PerftResult {

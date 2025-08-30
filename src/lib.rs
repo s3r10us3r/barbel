@@ -1,12 +1,10 @@
 use uci::uci_interpreter::UciController;
 
-pub mod attacks;
 pub mod bitboard_helpers;
 pub mod position;
 pub mod constants;
 pub mod evaluation;
 pub mod fen_parsing;
-pub mod lookups;
 pub mod moving;
 pub mod search;
 pub mod uci;

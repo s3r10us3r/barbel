@@ -1,8 +1,5 @@
 use crate::{
-    position::{board::Board, zobrist_hashing::ZobristHasher},
-    fen_parsing::parse_fen::{parse_fen, FenError},
-    moving::move_generation::{generate_moves, MoveList},
-    search::alpha_beta::Searcher,
+    fen_parsing::parse_fen::{parse_fen, FenError}, moving::move_generation::MoveGenerator, moving::move_list::MoveList, position::{board::Board, zobrist_hashing::ZobristHasher}, search::alpha_beta::Searcher
 };
 
 #[derive(Debug)]
@@ -23,6 +20,7 @@ pub struct Engine {
     board: Board,
     mvs: MoveList,
     searcher: Searcher,
+    move_gen: MoveGenerator
 }
 
 impl Default for Engine {
@@ -31,6 +29,7 @@ impl Default for Engine {
             board: Board::new(ZobristHasher::new()),
             mvs: MoveList::new(),
             searcher: Searcher::new(),
+            move_gen: MoveGenerator::new()
         }
     }
 }
@@ -48,7 +47,7 @@ impl Engine {
     }
 
     pub fn make_move(&mut self, mv_s: &str) -> Result<(), StateError> {
-        self.mvs = generate_moves(&self.board);
+        self.mvs = self.move_gen.generate_moves(&self.board);
         for mv in self.mvs.iter() {
             let mv_str = mv.to_str();
             if mv_str == mv_s {

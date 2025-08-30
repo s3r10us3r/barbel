@@ -1,9 +1,7 @@
-use crate::{constants::{BLACK, WHITE}, lookups::LookupHolder};
-
+use crate::{constants::{BLACK, WHITE}, moving::move_generation::MoveGenerator};
 use super::{board_state::BoardState, piece_set::PieceSet, zobrist_hashing::ZobristHasher};
 
 pub struct Board {
-    pub lookup_holder: LookupHolder,
     pub players: [PieceSet; 2],
     pub us: usize,
     pub enemy: usize,
@@ -13,12 +11,12 @@ pub struct Board {
     hash_stack: Vec<u64>,
     checkers: u64,
     occ: u64,
+    pub mg: MoveGenerator
 }
 
 impl Board {
     pub fn new(hasher: ZobristHasher) -> Board {
         Board {
-            lookup_holder: LookupHolder::new(),
             players: [PieceSet::new(BLACK), PieceSet::new(WHITE)],
             us: WHITE,
             hasher,
@@ -28,6 +26,7 @@ impl Board {
             hash_stack: vec![],
             checkers: 0,
             occ: 0,
+            mg: MoveGenerator::new()
         }
     }
 
@@ -105,7 +104,8 @@ impl Board {
     }
 
     fn compute_checkers(&mut self) {
-        self.checkers = self.attackers_to_exist(
+        self.checkers = self.mg.attackers_to_exist(
+            self, 
             self.players[self.us].get_king(),
             self.get_occupancy(),
             self.enemy,

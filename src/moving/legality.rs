@@ -1,4 +1,68 @@
-use crate::{bitboard_helpers::get_lsb, position::board::Board, constants::WHITE, moving::mv::Move};
+use crate::{bitboard_helpers::*, constants::WHITE, moving::{move_generation::MoveGenerator, move_list::MoveList, mv::Move}, position::board::Board};
+
+impl MoveGenerator {
+    pub fn filter_illegal_moves_when_check(&self, move_list: &mut MoveList, board: &Board, checker: u64) {
+        let (us, enemy) = board.get_piecesets();
+        let king = us.get_king();
+        let king_sq = get_lsb(&king);
+        let checker_sq = get_lsb(&checker);
+
+        let mut target_mask = checker;
+        if (enemy.get_diagonals() | enemy.get_orthogonals()) & checker != 0 {
+            target_mask |= self.get_bb_between(king_sq, checker_sq);
+        };
+        for i in (0..move_list.get_count()).rev() {
+            let mv = move_list.get_move(i);
+            if mv.get_start_bb() & king != 0 {
+                if !board.is_king_move_legal(mv) {
+                    move_list.remove(i);
+                }
+            } else if mv.is_en_passant() {
+                if !board.is_en_passant_legal_when_check(mv, checker) {
+                    move_list.remove(i);
+                }
+            } else if mv.get_target_bb() & target_mask == 0 || !board.is_normal_move_legal(mv, king) {
+                move_list.remove(i);
+            }
+        }
+    }
+
+    pub fn filter_illegal_moves(&self, move_list: &mut MoveList, board: &Board) {
+        let pinns = self.get_pinned(board);
+        let king = board.get_pieces(board.us).get_king();
+        for i in (0..move_list.get_count()).rev() {
+            let mv = &move_list[i];
+            if (mv.is_en_passant()
+                || mv.is_kingside_castle()
+                || mv.is_queenside_castle()
+                || mv.get_start_bb() & pinns != 0
+                || mv.get_start_bb() & king != 0)
+                && !board.is_legal(mv)
+            {
+                move_list.remove(i);
+            } 
+        }
+    }
+
+    fn get_pinned(&self, board: &Board) -> u64 {
+        let us_piece_set = board.get_pieces(board.us);
+        let enemy_piece_set = board.get_pieces(board.enemy);
+        let king_bb = us_piece_set.get_king();
+        let allies = us_piece_set.get_all();
+        let enemies = enemy_piece_set.get_all();
+        let king_sq = get_lsb(&king_bb);
+
+        let mut snipers = 
+            (self.get_rook_attacks(king_sq, enemies) & enemy_piece_set.get_orthogonals()) |
+            (self.get_bishop_attacks(king_sq, enemies) & enemy_piece_set.get_diagonals());
+        let mut pinns = 0;
+        while snipers != 0 {
+            let snip_sq = pop_lsb(&mut snipers);
+            pinns |= self.get_bb_between(king_sq, snip_sq) & allies;
+        }
+        pinns
+    }
+}
 
 impl Board {
     pub fn is_legal(&self, mv: &Move) -> bool {
@@ -31,7 +95,7 @@ impl Board {
         let cap_bb = 1 << cap_sq;
         occ &= !(start_bb | cap_bb);
         occ |= target_bb;
-        let attackers = self.attackers_to_exist(king, occ, self.enemy);
+        let attackers = self.mg.attackers_to_exist(self, king, occ, self.enemy);
         attackers == 0
     }
 
@@ -47,7 +111,7 @@ impl Board {
         let mut occ = self.get_occupancy();
         occ &= !(start_bb | cap_bb);
         occ |= target_bb;
-        let mut attackers = self.attackers_to_exist(king, occ, self.enemy);
+        let mut attackers = self.mg.attackers_to_exist(self, king, occ, self.enemy);
         attackers &= !(checker & cap_bb);
         attackers == 0 && checker == cap_bb
     }
@@ -56,7 +120,7 @@ impl Board {
         let start = mv.get_start_field();
         let target = mv.get_target_field();
         for i in start..(target + 1) {
-            if self.attackers_to_exist(1 << i, self.get_occupancy(), self.enemy) != 0 {
+            if self.mg.attackers_to_exist(self, 1 << i, self.get_occupancy(), self.enemy) != 0 {
                 return false;
             }
         }
@@ -67,7 +131,7 @@ impl Board {
         let start = mv.get_start_field();
         let target = mv.get_target_field();
         for i in target..(start + 1) {
-            if self.attackers_to_exist(1 << i, self.get_occupancy(), self.enemy) != 0 {
+            if self.mg.attackers_to_exist(self, 1 << i, self.get_occupancy(), self.enemy) != 0 {
                 return false;
             }
         }
@@ -79,7 +143,7 @@ impl Board {
         let king_bb = self.players[self.us].get_king();
         let target = mv.get_target_field();
         let temp_occ = occ & !king_bb;
-        self.attackers_to_exist(1 << target, temp_occ, self.enemy) == 0
+        self.mg.attackers_to_exist(self, 1 << target, temp_occ, self.enemy) == 0
     }
 
     pub fn is_normal_move_legal(&self, mv: &Move, king: u64) -> bool {
@@ -87,7 +151,7 @@ impl Board {
         let target_bb = 1 << mv.get_target_field();
         let occ = self.get_occupancy();
         let temp_occ = (occ & !start_bb) | target_bb;
-        let mut attacker = self.attackers_to_exist(king, temp_occ, self.enemy) & !target_bb;
+        let mut attacker = self.mg.attackers_to_exist(self, king, temp_occ, self.enemy) & !target_bb;
         attacker &= !target_bb;
         attacker == 0
     }
