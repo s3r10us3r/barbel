@@ -59,13 +59,13 @@ impl Engine {
     }
 
     pub fn search_to_depth(&mut self, depth: i32) {
-        let mv = self.searcher.search_to_depth(&mut self.board, depth);
-        println!("bestmove {}", mv.to_str());
+        let sr = self.searcher.search_to_depth(&mut self.board, depth);
+        println!("bestmove {}", sr.mv.to_str());
     }
 
     pub fn search_with_time(&mut self, wtime: u64, btime: u64, winc: u64, binc: u64) {
-        let mv = self.searcher.search_with_time(&mut self.board, wtime, btime, winc, binc);
-        println!("bestmove {}", mv.to_str());
+        let sr= self.searcher.search_with_time(&mut self.board, wtime, btime, winc, binc);
+        println!("bestmove {}", sr.mv.to_str());
     }
 
     pub fn get_board(&self) -> &Board {

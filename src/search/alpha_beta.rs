@@ -4,7 +4,6 @@ use std::thread;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
-use crate::moving::move_generation::MoveGenerator;
 use crate::search::transposition::TTEntryType;
 use crate::{
     position::board::Board, constants::WHITE, evaluation::evaluate, 
@@ -20,13 +19,21 @@ use super::{
 const INFINITY: i32 = 10_000_000;
 const MATE: i32 = 1_000_000;
 
+
+pub struct SearchResult {
+    pub mv: Move,
+    pub nodes_searched: i32,
+    pub depth_reached: i32,
+    pub ttable_hits: i32,
+}
+
+
 pub struct Searcher {
     ttable: TTable,
     pv_table: PvTable,
     search_depth: i32,
     ttable_hits: i32,
     nodes_searched: i32,
-    max_depth: i32,
     generation: i32,
     stop: Arc<AtomicBool>,
 }
@@ -39,7 +46,6 @@ impl Default for Searcher {
             search_depth: 0,
             ttable_hits: 0,
             nodes_searched: 0,
-            max_depth: 0,
             generation: 0,
             stop: Arc::new(AtomicBool::new(false))
         }
@@ -51,16 +57,17 @@ impl Searcher {
         Self::default()
     }
 
-    pub fn search_to_depth(&mut self, board: &mut Board, depth: i32) -> Move {
+    pub fn search_to_depth(&mut self, board: &mut Board, depth: i32) -> SearchResult {
         self.nodes_searched = 0;
         self.pv_table = PvTable::new(depth as usize);
         for i in 1..(depth + 1) {
             self.make_search(board, i);
         }
-        self.pv_table.get_best(0)
+        let mv = self.pv_table.get_best(0);
+        SearchResult { depth_reached: self.search_depth, mv, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits }
     }
 
-    pub fn search_with_time(&mut self, board: &mut Board, wtime: u64, btime: u64, winc: u64, binc: u64) -> Move {
+    pub fn search_with_time(&mut self, board: &mut Board, wtime: u64, btime: u64, winc: u64, binc: u64) -> SearchResult {
         let (time, inc) = if board.us == WHITE {
             (wtime, winc)
         } else {
@@ -71,7 +78,7 @@ impl Searcher {
         self.search_to_time(board, time, true)
     }
 
-    pub fn search_to_time(&mut self, board: &mut Board, time: u64, cut: bool) -> Move {
+    pub fn search_to_time(&mut self, board: &mut Board, time: u64, cut: bool) -> SearchResult {
         self.nodes_searched = 0;
         self.pv_table = PvTable::new(50);
         self.stop.store(false, Ordering::Relaxed);
@@ -101,7 +108,7 @@ impl Searcher {
                     best = moves.get_move(0).clone();
                 }
                 self.stop.store(true, Ordering::Relaxed);
-                best
+                SearchResult { depth_reached: self.search_depth, mv: best, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits }
             });
 
             while start.elapsed().as_millis() < time && !stop.load(Ordering::Relaxed) {
@@ -116,12 +123,11 @@ impl Searcher {
         self.generation += 1;
         self.search_depth = depth;
         self.ttable_hits = 0;
-        self.max_depth = 0;
         let best_value = self.nega_max(board, 0, -INFINITY, INFINITY);
         if !self.stop.load(Ordering::Relaxed) {
             println!(
-                "info depth {} cp {} tthits {} nodes searched {} depth reached {} pv {}",
-                depth, best_value, self.ttable_hits, self.nodes_searched, self.max_depth, self.pv_table.get_pv_string()
+                "info depth {} cp {} tthits {} nodes searched {} pv {}",
+                depth, best_value, self.ttable_hits, self.nodes_searched, self.pv_table.get_pv_string()
             );
         }
         best_value
@@ -196,9 +202,6 @@ impl Searcher {
     pub fn quiesce_nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop.load(Ordering::Relaxed) {
             return alpha;
-        }
-        if depth > self.max_depth {
-            self.max_depth = depth;
         }
         self.nodes_searched += 1;
         let moves = board.mg.generate_moves(board);

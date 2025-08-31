@@ -14,6 +14,7 @@ pub fn wac_test() {
     let mut entries = parse_wac();
     let mut time = INIT_TIME;
     let mut passed_count = 0;
+    let mut depth_sum = 0;
     while !entries.is_empty() {
         println!("Time per move: {}s", time / 1000);
         let mut failed_entries: Vec<WacEntry> = Vec::new();
@@ -22,11 +23,13 @@ pub fn wac_test() {
         for entry in entries.clone() {
             let mut board = parse_fen(&entry.fen).unwrap();
             let mut searcher = Searcher::new();
-            let mv = searcher.search_to_time(&mut board, time, false);
+            let search_result = searcher.search_to_time(&mut board, time, false);
+            let mv = search_result.mv;
             let mv_str = mv.to_str();
             let passed = entry.best_moves.contains(&mv_str);
             if passed {
                 passed_count += 1;
+                depth_sum += search_result.depth_reached;
                 println!("Passed {}", entry.id);
             } else {
                 failed_count += 1;
@@ -36,8 +39,9 @@ pub fn wac_test() {
                     entry.id, mv_str, entry.best_moves.join(" "));
             }
         }
-        println!("WAC test finished, passed: {}, failed: {}, ratio: {}", 
-            passed_count, failed_count, ((passed_count as f32 / 300.) * 100.) as i32);
+        let depth_avg = depth_sum as f32 / passed_count as f32;
+        println!("WAC test finished, passed: {}, failed: {}, ratio: {}, avg depth: {:.2}", 
+            passed_count, failed_count, ((passed_count as f32 / 300.) * 100.) as i32, depth_avg);
         if failed_count > 0 {
             println!("Failed positions: {}", failed_ids.join(" "));
         }
