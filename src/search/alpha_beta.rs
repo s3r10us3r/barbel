@@ -4,9 +4,10 @@ use std::thread;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
+use crate::evaluation::Evaluator;
 use crate::search::transposition::TTEntryType;
 use crate::{
-    position::board::Board, constants::WHITE, evaluation::evaluate, 
+    position::board::Board, constants::WHITE, 
     moving::{move_list::MoveList, mv::Move}
 };
 
@@ -31,6 +32,7 @@ pub struct SearchResult {
 pub struct Searcher {
     ttable: TTable,
     pv_table: PvTable,
+    evaluator: Evaluator,
     search_depth: i32,
     ttable_hits: i32,
     nodes_searched: i32,
@@ -43,6 +45,7 @@ impl Default for Searcher {
         Searcher {
             ttable: TTable::new(),
             pv_table: PvTable::new(2), //the size is arbitrary it gets overriden on new search
+            evaluator: Evaluator::new(),
             search_depth: 0,
             ttable_hits: 0,
             nodes_searched: 0,
@@ -212,7 +215,7 @@ impl Searcher {
                 return 0;
             }
         }
-        let mut best_value = evaluate(board, &board.mg);
+        let mut best_value = self.evaluator.evaluate(board, &board.mg);
         if best_value >= beta {
             return best_value;
         }

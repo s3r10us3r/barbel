@@ -173,6 +173,7 @@ impl UciController {
                     return;
                 }
                 if let Some(moves_str) = moves_opt {
+                    println!("moves");
                     for mv_s in moves_str.trim().split(' ') {
                         let _ = self.engine.make_move(mv_s);
                     }

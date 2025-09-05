@@ -8,6 +8,8 @@ pub enum TTEntryType {
     Upper
 }
 
+// this has space left, so option does not increase its size
+// if it were to change check for option size
 #[derive(Clone, Copy, Default)]
 pub struct Entry {
     pub key: u64,
@@ -20,7 +22,7 @@ pub struct Entry {
 
 pub struct TTable {
     mask: usize,
-    table: Box<[Entry]>,
+    table: Box<[Option<Entry>]>,
 }
 
 //depth preferred for now
@@ -29,25 +31,20 @@ impl TTable {
         let entries = 1 << K;
         TTable {
             mask: entries - 1,
-            table: vec![Entry::default(); entries].into_boxed_slice(),
+            table: vec![None; entries].into_boxed_slice(),
         }
     }
 
-    pub fn probe(&self, key: u64) -> Option<&Entry> {
+    pub fn probe(&self, key: u64) -> Option<Entry> {
         let index = (key as usize) & self.mask;
-        let entry = &self.table[index];
-        if entry.key == key {
-            Some(entry)
-        } else {
-            None
-        }
+        self.table[index]
     }
 
     pub fn store(&mut self, new: Entry) {
         let index = (new.key as usize) & self.mask;
         let existing = &self.table[index];
-        if existing.key == 0 || existing.depth_left < new.depth_left || new.generation - 5 >= existing.generation {
-            self.table[index] = new;
+        if existing.is_some_and(|e| e.depth_left < new.depth_left || new.generation - 5 >= e.generation) {
+            self.table[index] = Some(new);
         }
     }
 }
