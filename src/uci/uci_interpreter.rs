@@ -1,13 +1,24 @@
+use regex::Regex;
+
 use super::engine::Engine;
 use crate::{tests::{nps::make_nps, test_suites::NOLOT, wac::wac_test}, uci::perft::make_perft};
+use core::panic::PanicInfo;
 use std::{
     env, fs, io::{self, Write}, process::exit
 };
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+enum UciControllerState {
+    INIT,
+    IDLE,
+    THINKING,
+}
+
 pub struct UciController {
     engine: Engine,
+    state: UciControllerState,
+    parsed_command: Option<String>
 }
 
 impl Default for UciController {
@@ -20,7 +31,7 @@ impl UciController {
     pub fn new() -> Self {
         let mut engine = Engine::new();
         let _ = engine.set_pos(START_POS);
-        UciController { engine }
+        UciController { engine, state: UciControllerState::INIT, parsed_command: None }
     }
 
     pub fn run(&mut self) {
@@ -37,29 +48,262 @@ impl UciController {
                     if us == 0 {
                         return;
                     }
-                    self.exec_command(&input);
+                    let normalized_command = merge_spaces(input);
+                    self.exec_command(normalized_command);
                 }
             }
         }
     }
 
-    fn exec_command(&mut self, command: &str) {
-        let commands: Vec<&str> = command.trim().split(" ").collect();
-        let command = commands[0];
-        let args: Vec<&str> = commands[1..].to_vec();
-        match command {
-            "go" => self.go(args),
-            "position" => self.position(args),
-            "isready" => self.is_ready(),
-            "stop" => self.stop(),
-            "help" => self.help(),
-            "uci" => self.uci(),
-            "quit" => self.quit(),
-            "ucinewgame" => self.ucinewgame(),
-            "wac" => wac_test(),
-            "nps" => nps_test(),
-            _ => self.invalid_command(command),
+    fn exec_command(&mut self, command: String ) {
+        self.parsed_command = Some(command);
+        let token = self.pop_token();
+        if let Some(t) = token {
+            match t.as_str() {
+                "go" => self.go(),
+                "position" => self.position(),
+                "isready" => self.is_ready(),
+                "stop" => unimplemented!(),
+                "help" => self.help(),
+                "uci" => self.uci(),
+                "quit" => self.quit(),
+                "ucinewgame" => self.ucinewgame(),
+                //TODO: Move this to engine so it can be later threaded
+                "wac" => wac_test(),
+                "nps" => nps_test(),
+                _ => self.invalid_command(&t),
+            }
         }
+    }
+
+    fn go(&mut self) {
+        let token = self.pop_token();
+        match token {
+            Some(t) => {
+                match t.as_str() {
+                    "perft" => self.go_perft(),
+                    "depth" => self.go_depth(),
+                    "wtime" | "btime" | "winc" | "binc" => {
+                        self.push_token_to_front(t);
+                        self.go_time();
+                    }
+                    "movetime" => unimplemented!("Not implemented yet!"),
+                    _ => unimplemented!()
+                }
+            }
+            None => {
+                panic!("Plain move is not implemented yet, expect it in future")
+            }
+        }
+    }
+
+    fn go_perft(&mut self) {
+        let token = self.pop_token();
+        match token {
+            Some(t) => {
+                let parse_result = t.parse::<i32>();
+                if let Ok(depth) = parse_result {
+                    let board = self.engine.get_board_mut();
+                    let result = make_perft(depth, board);
+                    println!("\nNodes searched: {}\n\n", result.result);
+                } else {
+                    println!("Invalid argument!\n");
+                }
+            }
+            None => {
+                self.reset();
+            }
+        }
+    }
+
+    fn go_depth(&mut self) {
+        let token = self.pop_token();
+        match token {
+            Some(t) => {
+                let parse_result = t.parse::<i32>();
+                if let Ok(depth) = parse_result {
+                    if depth <= 0 {
+                        println!("Invalid depth {}, depth must be at least 1", { depth });
+                        self.reset();
+                    }
+                    self.engine.search_to_depth(depth);
+                } else {
+                    println!("Invalid argument!\n");
+                }
+            }
+            None => {
+                self.reset();
+            }
+        }
+    }
+
+    fn go_time(&mut self) {
+        let mut wtime: u64 = 0;
+        let mut btime: u64 = 0;
+        let mut winc: u64 = 0;
+        let mut binc: u64 = 0;
+
+        for _ in 0..4 {
+            if let (Some(t), Some(val)) = (self.pop_token(), self.pop_token()) {
+                let num = val.parse::<u64>().unwrap_or_default();
+                match t.as_str() {
+                    "wtime" => wtime = num,
+                    "btime" => btime = num,
+                    "winc" => winc = num,
+                    "binc" => binc = num,
+                    _ => {}
+                }
+            } else {
+                panic!("Invalid args")
+            }
+        }
+        self.engine.search_with_time(wtime, btime, winc, binc);
+    }
+
+    fn position(&mut self) {
+        let token = self.pop_token();
+        if let Some(p) = token {
+            match p.as_str() {
+                "startpos" => self.position_startpos(),
+                "fen" => self.position_fen(),
+                _ => {
+                    self.reset();
+                }
+            }
+        } else {
+            self.reset();
+        }
+    }
+
+    fn position_startpos(&mut self) {
+        let token = self.pop_token();
+        match token {
+            Some(t) => {
+                let mut moves = vec![];
+                if t.as_str() == "moves" {
+                    loop {
+                        let token = self.pop_token();
+                        if let Some(t) = token {
+                            moves.push(t);
+                        } else {
+                            break;
+                        }
+                    }
+                    self.position_with_fen(START_POS.to_owned(), moves);
+                }
+            } 
+            None => self.position_with_fen(START_POS.to_owned(), vec![]),
+        }
+    }
+
+    fn position_fen(&mut self) {
+        let mut fen_vec = Vec::new();
+        loop {
+            let token = self.pop_token();
+            match token {
+                Some(t) => {
+                    match t.as_str() {
+                        "moves" => {
+                            let moves = self.parse_moves();
+                            self.position_with_fen(fen_vec.join(" "), moves);
+                            break;
+                        },
+                        _ => fen_vec.push(t.to_owned()),
+                    }
+                }
+                None => {
+                    self.position_with_fen(fen_vec.join(" "), vec![]);
+                    break;
+                }
+            }
+        }
+
+    }
+
+    //this assumes the 'moves' string is already parsed
+    fn parse_moves(&mut self) -> Vec<String> {
+        let mut moves = vec![];
+        loop {
+            let token = self.pop_token();
+            match token {
+                Some(t) => {
+                    moves.push(t);
+                }
+                None => { break; }
+            }
+        }
+        moves
+    }
+
+    fn position_with_fen(&mut self, fen: String, moves: Vec<String>) {
+        let res = self.engine.set_pos(fen.as_str());
+        if let Err(e) = res {
+            println!("Invalid fen!");
+            println!("{e:?}");
+            self.reset();
+            return;
+        }
+        for move_str in moves {
+            let mv_s = move_str.as_str();
+            let err = self.engine.make_move(mv_s);
+            if let Err(e) = err {
+                panic!("Invalid move! {e:?}");
+            }
+        }
+    }
+
+    fn reset(&mut self) {
+        self.state = UciControllerState::IDLE;
+        self.parsed_command = None;
+    }
+
+    fn pop_token(&mut self) -> Option<String> {
+        let parsed_command = self.parsed_command.clone();
+        match parsed_command {
+            Some(command) => {
+                match command.split_once(' ') {
+                    Some((next, rest)) => {
+                        if next.is_empty() {
+                            self.parsed_command = None;
+                            None
+                        } else {
+                            self.parsed_command = Some(rest.to_owned());
+                            Some(next.to_owned())
+                        }
+                    }
+                    None => {
+                        if command.is_empty() { None } 
+                        else { 
+                            self.parsed_command = None;
+                            Some(command.to_owned()) 
+                        }
+                    }
+                }
+            },
+            None => None
+        }
+    }
+
+    fn push_token_to_front(&mut self, token: String) {
+        let parsed_command = self.parsed_command.clone();
+        match parsed_command {
+            Some(s) => self.parsed_command = Some(token + " " + s.as_str()),
+            None => self.parsed_command = Some(token),
+        }
+    }
+
+    //return None if the number of arguments is less than specified
+    fn pop_tokens(&mut self, n: i32) -> Option<Vec<String>> {
+        let mut tokens = Vec::new();
+        for _ in 0..n {
+            let token = self.pop_token();
+            if let Some(t) = token {
+                tokens.push(t);
+            } else {
+                return None;
+            }
+        };
+        Some(tokens)
     }
 
     fn ucinewgame(&mut self) {
@@ -73,114 +317,6 @@ impl UciController {
 
     fn uci(&mut self) {
         println!("uciok");
-    }
-
-    fn go(&mut self, args: Vec<&str>) {
-        if args[0] == "perft" {
-            self.go_perft(args);
-        } else if args[0] == "depth" {
-            self.go_depth(args);
-        } else if args[0] == "wtime" {
-            self.go_time(args);
-        } else if args[0] == "movetime" {
-        }
-    }
-
-    fn go_perft(&mut self, args: Vec<&str>) {
-        let parse_result = args[1].parse::<i32>();
-        if let Ok(depth) = parse_result {
-            let board = self.engine.get_board_mut();
-            let result = make_perft(depth, board);
-            print!("\nNodes searched: {}\n\n", result.result);
-        } else {
-            println!("Invalid argument!\n");
-        }
-    }
-
-    fn go_depth(&mut self, args: Vec<&str>) {
-        let parse_result = args[1].parse::<i32>();
-        if let Ok(depth) = parse_result {
-            if depth <= 0 {
-                println!("Invalid depth {}, depth must be at least 1", { depth });
-            }
-            self.engine.search_to_depth(depth);
-        } else {
-            println!("Invalid depth: {}", args[1]);
-        }
-    }
-
-    fn go_time(&mut self, args: Vec<&str>) {
-        let mut wtime: u64 = 0;
-        let mut btime: u64 = 0;
-        let mut winc: u64 = 0;
-        let mut binc: u64 = 0;
-
-        for i in (0..args.len()-1).step_by(2) {
-            let s = args[i];
-            let tr = args[i+1].parse::<u64>();
-            if let Ok(t) = tr {
-                match s {
-                    "wtime" => wtime = t,
-                    "btime" => btime = t,
-                    "winc" => winc = t,
-                    "binc" => binc = t,
-                    _ => panic!("Invallid arguments")
-                }
-            } else {
-                panic!("Invalid arguments")
-            }
-        }
-        self.engine.search_with_time(wtime, btime, winc, binc);
-    }
-            
-    fn go_movetime(&mut self, args: Vec<&str>) {
-        let movetime = args[1].parse::<u64>();
-    }
-
-    fn position(&mut self, args: Vec<&str>) {
-        match args[0] {
-            "startpos" => {
-                let res = self.engine.set_pos(START_POS);
-                if let Err(e) = res {
-                    println!("Invalid fen!");
-                    println!("{e:?}");
-                }
-                if args.len() > 2 && args[1] == "moves" {
-                    for mv_s in args[2..].iter() {
-                        let e = self.engine.make_move(mv_s);
-                        if e.is_err() {
-                            println!("MOVE NOT FOUND: {mv_s}");
-                        }
-                    }
-                }
-            }
-            "fen" => {
-                if args.len() <= 4 {
-                    println!("Invalid fen!");
-                    println!("too little arguments")
-                }
-                let fen_str = args[1..].join(" ");
-                let splits: Vec<&str> = fen_str.split("moves").collect();
-                let (fen_str, moves_opt) = if splits.len() > 2 {
-                    (splits[0].trim(), Some(splits[1]))
-                } else {
-                    (splits[0], None)
-                };
-                let res = self.engine.set_pos(fen_str);
-                if let Err(e) = res {
-                    println!("Invalid fen!");
-                    println!("{e:?}");
-                    return;
-                }
-                if let Some(moves_str) = moves_opt {
-                    println!("moves");
-                    for mv_s in moves_str.trim().split(' ') {
-                        let _ = self.engine.make_move(mv_s);
-                    }
-                }
-            }
-            _ => println!("Unrecognized argument"),
-        }
     }
 
     fn is_ready(&self) {
@@ -198,6 +334,12 @@ impl UciController {
     fn invalid_command(&self, command: &str) {
         println!("Unknown command: '{command}'. Type help for more information.");
     }
+}
+
+fn merge_spaces(s: String) -> String {
+    let s = s.trim();
+    let re = Regex::new(r"\s+").unwrap();
+    re.replace_all(s, " ").to_string()
 }
 
 fn nps_test() {

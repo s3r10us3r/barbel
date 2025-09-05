@@ -43,7 +43,6 @@ impl Engine {
         self.mvs.reset();
         let new_board = parse_fen(fen)?;
         self.board = new_board;
-        println!("{}", self.board.to_fen());
         Ok(())
     }
 
