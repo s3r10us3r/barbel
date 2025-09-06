@@ -8,7 +8,8 @@ impl MoveGenerator {
         (self.get_pawn_attacks(k_i, color) & pieces.get_pawns()) |
         (self.get_knight_attacks(k_i) & pieces.get_knights()) |
         (self.get_rook_attacks(k_i, occ) & pieces.get_orthogonals()) |
-        (self.get_bishop_attacks(k_i, occ) & pieces.get_diagonals())
+        (self.get_bishop_attacks(k_i, occ) & pieces.get_diagonals()) |
+        (self.get_king_attacks(k_i) & pieces.get_king())
     }
 
     pub fn attacks_to(&self, piece: usize, sq: usize, occ: u64, color: usize) -> u64 {
