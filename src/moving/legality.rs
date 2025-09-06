@@ -143,7 +143,7 @@ impl Board {
         let king_bb = self.players[self.us].get_king();
         let target = mv.get_target_field();
         let temp_occ = occ & !king_bb;
-        self.mg.attackers_to_exist(self, 1 << target, temp_occ, self.enemy) == 0
+        self.mg.attackers_to_exist(self, 1 << target, temp_occ, self.enemy) != 0
     }
 
     pub fn is_normal_move_legal(&self, mv: &Move, king: u64) -> bool {
