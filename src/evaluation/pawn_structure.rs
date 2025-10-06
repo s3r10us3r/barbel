@@ -1,10 +1,12 @@
-use crate::{bitboard_helpers::{pop_lsb, reverse}, constants::*, evaluation::phase::interp_phase, position::{board::Board, piece_set::PieceSet}};
+use crate::{bitboard_helpers::{pop_lsb, reverse}, constants::*, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, position::{board::Board, piece_set::PieceSet}};
 
 const K: usize = 16;
 
 #[derive(Clone)]
 pub struct PawnEvalHashEntry {
     pub score: i32,
+    pub half_open_us: u64,
+    pub half_open_enemy: u64,
 }
 
 //option here is relatively cheap since the table is already small
@@ -20,14 +22,12 @@ impl PawnEvalHashTable {
         PawnEvalHashTable { table: vec![None; size], mask: (size as u64) - 1 }
     }
 
-    pub fn store(&mut self, us: u64, enemy: u64, score: i32) {
-        let hash = hash_pawns(us, enemy);
+    pub fn store(&mut self, hash: u64, entry: PawnEvalHashEntry) {
         let idx = hash & self.mask;
-        self.table[idx as usize] = Some(PawnEvalHashEntry{score});
+        self.table[idx as usize] = Some(entry);
     }
 
-    pub fn probe(&self, us: u64, enemy: u64) -> Option<PawnEvalHashEntry> {
-        let hash = hash_pawns(us, enemy);
+    pub fn probe(&self, hash: u64) -> Option<PawnEvalHashEntry> {
         let idx = hash & self.mask;
         self.table[idx as usize].clone()
     }
@@ -49,11 +49,31 @@ fn hash_pawns(us: u64, enemy: u64) -> u64 {
     z
 }
 
+impl Evaluator {
+    //this has to be done FIRST
+    pub fn score_pawns(&mut self, us: &PieceSet, enemy: &PieceSet, pre_eval_result: &PreEvalResult) -> PawnEvalHashEntry {
+        let our_pawns = us.get_pawns();
+        let enemy_pawns = enemy.get_pawns();
+        let pawn_hash = hash_pawns(our_pawns, enemy_pawns);
+        match self.pawn_hash.probe(pawn_hash) {
+            Some(entry) => entry,
+            None => {
+                let half_open_us = pre_eval_result.half_open_files[us.get_color()];
+                let half_open_enemy = pre_eval_result.half_open_files[enemy.get_color()];
+                let score = score_pawns_side(us, enemy, pre_eval_result.phase) - score_pawns_side(enemy, us, pre_eval_result.phase);
+                let entry = PawnEvalHashEntry{score, half_open_us, half_open_enemy};
+                self.pawn_hash.store(pawn_hash, entry.clone());
+                entry
+            }
+        }       
+    }
+}
+
 const PASSED_PAWN_BONUS_MG: i32 = 50;
 const PASSED_PAWN_BONUS_EG: i32 = 100;
 
-pub fn score_pawns(us: &PieceSet, enemy: &PieceSet, phase: i32) -> i32 {
-    score_passed_pawns(us, enemy, phase) + score_double_pawns(us.get_pawns(), phase) + score_isolated_pawns(us.get_pawns())
+fn score_pawns_side(us: &PieceSet, enemy: &PieceSet, phase: i32) -> i32 {
+    score_passed_pawns(us, enemy, phase)
 }
 
 fn score_passed_pawns(us: &PieceSet, enemy: &PieceSet, phase: i32) -> i32 {
@@ -77,41 +97,6 @@ fn count_passed_pawns(mut our_pawns: u64, enemy_pawns: u64) -> i32 {
     }
     cnt
 }
-
-fn score_double_pawns(pawns: u64, phase: i32) -> i32 {
-    let cnt = count_double_pawns(pawns);
-    cnt * interp_phase(DOUBLE_PAWN_PENALTY_MG, DOUBLE_PAWN_PENALTY_EG, phase)
-}
-
-fn count_double_pawns(pawns: u64) -> i32 {
-    let mut count = 0;
-    for file in FILES {
-        let filep = pawns & file;
-        let pawn_cnt = filep.count_ones();
-        if pawn_cnt == 2 {
-            count += 1;
-        }
-    }
-    count
-}
-
-const DOUBLE_PAWN_PENALTY_MG: i32 = -30;
-const DOUBLE_PAWN_PENALTY_EG: i32 = 0;
-
-fn score_isolated_pawns(pawns: u64) -> i32 {
-    let mut score = 0;
-    for (i, file) in FILES.iter().enumerate() {
-        let pawns_on_file = pawns & file;
-        if (pawns_on_file != 0) && (pawns & ISOALTED_PAWN_MASK[i] == 0) {
-            score += ISOLATED_PAWN_PENALTY[i];
-        }
-    }
-    score
-}
-
-//per file, this is symmetrcial
-const ISOLATED_PAWN_PENALTY: [i32; 8] = [-10, -15, -20, -25, -25, -20, -15, -10];
-const ISOALTED_PAWN_MASK: [u64; 8] = [FILEB, FILEA | FILEC, FILEB | FILED, FILEC | FILEE, FILED | FILEF, FILEE | FILEG, FILEF | FILEH, FILEG];
 
 const PASSED_PAWN_MASK: [u64; 64] = compute_passed_pawn_masks(); 
 

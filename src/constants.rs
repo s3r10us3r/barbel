@@ -36,3 +36,4 @@ pub const FILES: [u64; 8] = [FILEA, FILEB, FILEC, FILED, FILEE, FILEF, FILEG, FI
 
 pub const KINGSIDE_CASTLE_MASK: u64 = 0x60;
 pub const QUEENSIDE_CATLE_MASK: u64 = 0xE;
+

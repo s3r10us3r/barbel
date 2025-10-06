@@ -37,13 +37,16 @@ impl TTable {
 
     pub fn probe(&self, key: u64) -> Option<Entry> {
         let index = (key as usize) & self.mask;
-        self.table[index]
+        match self.table[index] {
+            Some(e) if e.key == key => Some(e),
+            _ => None
+        }
     }
 
     pub fn store(&mut self, new: Entry) {
         let index = (new.key as usize) & self.mask;
         let existing = &self.table[index];
-        if existing.is_some_and(|e| e.depth_left < new.depth_left || new.generation - 5 >= e.generation) {
+        if existing.is_none() || existing.is_some_and(|e| e.depth_left < new.depth_left) {
             self.table[index] = Some(new);
         }
     }

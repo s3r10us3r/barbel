@@ -37,3 +37,9 @@ const INIT_PHASE_VALUE: u32 = PAWN_PHASE_VALUE * 16
     + BISHOP_PHASE_VALUE * 4
     + ROOK_PHASE_VALUE * 4
     + QUEEN_PHASE_VALUE * 2;
+
+#[test]
+fn should_interp_phase_correctly() {
+    let score = interp_phase(-150, 0, (INIT_PHASE_VALUE / 2) as i32);
+    assert_eq!(score, -75);
+}

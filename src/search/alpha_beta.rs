@@ -149,17 +149,20 @@ impl Searcher {
         let hash = board.get_hash();
 
         //ttable probe
-        if let Some(e) = self.ttable.probe(hash) {
-            self.ttable_hits += 1;
-            if e.depth_left >= depth_left && e.generation == self.generation {
-                match e.entry_type {
-                    TTEntryType::Exact => return e.score,
-                    TTEntryType::Lower => alpha = alpha.max(e.score),
-                    TTEntryType::Upper => {
-                        if e.score <= alpha {return e.score;}
+        //we avoid probing at root
+        if depth != 0 {
+            if let Some(e) = self.ttable.probe(hash) {
+                self.ttable_hits += 1;
+                if e.depth_left >= depth_left {
+                    match e.entry_type {
+                        TTEntryType::Exact => return e.score,
+                        TTEntryType::Lower => alpha = alpha.max(e.score),
+                        TTEntryType::Upper => {
+                            if e.score <= alpha {return e.score;}
+                        }
                     }
+                    if alpha >= beta { return alpha; }
                 }
-                if alpha >= beta { return alpha; }
             }
         }
 
@@ -215,7 +218,7 @@ impl Searcher {
                 return 0;
             }
         }
-        let mut best_value = self.evaluator.evaluate(board, &board.mg);
+        let mut best_value = self.evaluator.evaluate(board);
         if best_value >= beta {
             return best_value;
         }
