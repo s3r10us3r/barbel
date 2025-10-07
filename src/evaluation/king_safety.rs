@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::{bitboard_helpers::{get_file, get_lsb, get_rank, isolate_lsb}, constants::{BISHOP, FILES, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, moving::move_generation::MoveGenerator, position::{board::Board, piece_set::PieceSet}};
+use crate::{bitboard_helpers::{get_file, get_lsb, get_rank, isolate_lsb}, constants::{BISHOP, FILES, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, fen_parsing::parse_to_fen, moving::move_generation::MoveGenerator, position::{board::Board, piece_set::PieceSet}};
 
 impl Evaluator {
     pub fn evaluate_king_safety(&self, board: &Board, color: usize, pre_eval_result: &PreEvalResult) -> i32 {
@@ -39,20 +39,17 @@ impl Evaluator {
 
     // BUG: shift overflow
     fn king_shield_file_pen(&self, mut sq: i32, dir: i32, pawns: u64) -> i32 {
-        //one step
+        //this is the only place this can overflow since there are no pawns on the last rank
         sq += 8 * dir;
         if !(0..64).contains(&sq) {
             return 0;
         }
-
         let sq_bb = 1u64 << sq;
+
         if sq_bb & pawns != 0 {
             return 0;
         }
         sq += 8 * dir;
-        if !(0..64).contains(&sq) {
-            return 0;
-        }
 
         let sq_bb = 1u64 << sq;
         if sq_bb & pawns != 0 {
@@ -60,9 +57,6 @@ impl Evaluator {
         }
 
         sq += 8 * dir;
-        if !(0..64).contains(&sq) {
-            return 0;
-        }
 
         let sq_bb = 1u64 << sq;
         if sq_bb & pawns != 0 {
@@ -77,13 +71,14 @@ impl Evaluator {
     // attacked in the king zone, by said piece
     fn score_king_zone_attacks(&self, king_sq: usize, mg: &MoveGenerator, pre_eval_result: &PreEvalResult, color: usize) -> i32 {
         let king_zone = find_king_zone(king_sq, mg, color);
-        let am = &pre_eval_result.attack_map;
+        let am = &pre_eval_result.attack_maps[color ^ 1];
 
         let mut idx = 0;
         let pieces = [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING];
         for piece in pieces {
             idx += (king_zone & am.attack_maps[piece]).count_ones() as usize * PIECE_ATTACK_ID_VALUES[piece];
         }
+
         -SAFETY_TABLE[idx]
     }
 }

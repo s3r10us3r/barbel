@@ -1,7 +1,7 @@
 use crate::{bitboard_helpers::{get_lsb, pop_lsb}, constants::{BLACK, FILEA, FILEH, FILES, WHITE}, evaluation::{phase::get_phase_val, Evaluator}, moving::move_generation::MoveGenerator, position::board::Board};
 
 pub struct PreEvalResult {
-    pub attack_map: SimpAttackMap,
+    pub attack_maps: [SimpAttackMap; 2],
     pub half_open_files: [u64; 2],
     pub open_files: u64,
     pub phase: i32
@@ -28,8 +28,9 @@ impl Evaluator {
         half_open_files_arr[WHITE] &= !open_files;
 
         let phase = get_phase_val(board);
-        let attack_map = SimpAttackMap::new(board, &board.mg);
-        PreEvalResult {attack_map, half_open_files: half_open_files_arr, open_files, phase}
+        let white_attack_map = SimpAttackMap::new(board, &board.mg, WHITE);
+        let black_atttack_map = SimpAttackMap::new(board, &board.mg, BLACK);
+        PreEvalResult {attack_maps: [black_atttack_map, white_attack_map], half_open_files: half_open_files_arr, open_files, phase}
     }
 }
 
@@ -38,8 +39,8 @@ pub struct SimpAttackMap {
 }
 
 impl SimpAttackMap {
-    pub fn new(board: &Board, mg: &MoveGenerator) -> Self {
-        let pieces = board.get_pieces(board.us);
+    pub fn new(board: &Board, mg: &MoveGenerator, color: usize) -> Self {
+        let pieces = board.get_pieces(color);
 
         let pawn_attacks = if board.us == WHITE {
             let pawns = pieces.get_pawns();
