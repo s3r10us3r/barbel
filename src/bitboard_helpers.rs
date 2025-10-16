@@ -97,4 +97,9 @@ pub fn move_nw(sq: u64) -> u64 {
     (sq & !(RANK8 | FILEA)) << 7
 }
 
+#[inline]
+pub fn flip_color(color: usize) -> usize {
+    color ^ 1
+}
+
 pub const MOVE_FUNCS: [fn(u64) -> u64; 8] = [move_n, move_ne, move_e, move_se, move_s, move_sw, move_w, move_nw];

@@ -1,17 +1,18 @@
-use std::ops::Range;
-
-use crate::{bitboard_helpers::{get_file, get_lsb, get_rank, isolate_lsb}, constants::{BISHOP, FILES, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, fen_parsing::parse_to_fen, moving::move_generation::MoveGenerator, position::{board::Board, piece_set::PieceSet}};
+use crate::{bitboard_helpers::{flip_color, get_file, get_lsb, pop_lsb}, constants::{BISHOP, KNIGHT, QUEEN, ROOK, WHITE}, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, fen_parsing::parse_to_fen, moving::move_generation::MoveGenerator, position::{board::Board, piece_set::PieceSet}};
 
 impl Evaluator {
     pub fn evaluate_king_safety(&self, board: &Board, color: usize, pre_eval_result: &PreEvalResult) -> i32 {
         let mut score = 0;
-        let us = &board.players[color];
+        let us = board.get_pieces(color);
         if !(board.get_state().can_castle_kingside(color) || board.get_state().can_castle_queenside(color)) {
             score += self.score_pawn_shield(us.get_king(), us.get_pawns(), color);
         }
         let pawn_shield_score = interp_phase(score, 0, pre_eval_result.phase);
-        let king_safety_score = self.score_king_zone_attacks(get_lsb(&us.get_king()), &board.mg, pre_eval_result, color);
-        pawn_shield_score + king_safety_score
+        
+        let our_king_sq = get_lsb(&us.get_king());
+
+        let king_safety_score = self.score_king_zone_attacks_simp(our_king_sq, board.get_pieces(flip_color(color)), &board.mg, color, board.get_occupancy());
+        pawn_shield_score  + king_safety_score
     }
 
     /*
@@ -66,29 +67,52 @@ impl Evaluator {
         }
     }
 
-    // king zone is defined by a zone the king can move to + 2 rows in the enemy direction
-    // for every enemy piece we take its index value and multiply it by the number of squares
-    // attacked in the king zone, by said piece
-    fn score_king_zone_attacks(&self, king_sq: usize, mg: &MoveGenerator, pre_eval_result: &PreEvalResult, color: usize) -> i32 {
-        let king_zone = find_king_zone(king_sq, mg, color);
-        let am = &pre_eval_result.attack_maps[color ^ 1];
 
-        let mut idx = 0;
-        let pieces = [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING];
-        for piece in pieces {
-            idx += (king_zone & am.attack_maps[piece]).count_ones() as usize * PIECE_ATTACK_ID_VALUES[piece];
+    fn score_king_zone_attacks_simp(&self, king_sq: usize, enemy_pieces: &PieceSet, mg: &MoveGenerator, color: usize, occ: u64) -> i32 {
+        let mut king_zone = find_king_zone(king_sq, mg, color);
+
+        let mut knights_u= 0u64;
+        let mut bishops_u= 0u64;
+        let mut rooks_u= 0u64;
+        let mut queens_u = 0u64;
+        let mut attack_value = 0;
+
+
+        while king_zone != 0 {
+            let lsb = pop_lsb(&mut king_zone);
+            let knight_attacks = mg.get_knight_attacks(lsb);
+            let bishop_attacks = mg.get_bishop_attacks(lsb, occ);
+            let rook_attacks = mg.get_rook_attacks(lsb, occ);
+            let queen_attacks = rook_attacks | bishop_attacks;
+
+            let knights = knight_attacks & enemy_pieces.get_knights();
+            let bishops = bishop_attacks & enemy_pieces.get_bishops();
+            let rooks = rook_attacks & enemy_pieces.get_rooks();
+            let queens = queen_attacks & enemy_pieces.get_queens();
+
+            knights_u |= knights;
+            bishops_u |= bishops;
+            rooks_u |= rooks;
+            queens_u |= queens;
+
+            attack_value += knights.count_ones() * PIECE_ATTACK_CONSTANTS[KNIGHT];
+            attack_value += bishops.count_ones() * PIECE_ATTACK_CONSTANTS[BISHOP];
+            attack_value += rooks.count_ones() * PIECE_ATTACK_CONSTANTS[ROOK];
+            attack_value += queens.count_ones() * PIECE_ATTACK_CONSTANTS[QUEEN];
         }
+        
+        let attack_count = (knights_u | bishops_u | rooks_u | queens_u).count_ones();
 
-        -SAFETY_TABLE[idx]
+        -((attack_value * ATTACK_WEIGHT[attack_count as usize]) as i32 / 100)
     }
 }
 
 fn find_king_zone(king_sq: usize, mg: &MoveGenerator, color: usize) -> u64 {
     let king_attack = mg.get_king_attacks(king_sq);
     if color == WHITE {
-        king_attack | (king_attack << 8) | (king_attack << 16)
+        king_attack | (king_attack << 8)
     } else {
-        king_attack | (king_attack >> 8) | (king_attack >> 16)
+        king_attack | (king_attack >> 8)
     }
 }
 
@@ -96,19 +120,8 @@ const ONE_SQUARE_PENALTY: i32 = -10;
 const TWO_SQUARE_PENALTY: i32 = -25;
 const OPEN_FILE_PENALTY: i32 = -50;
 
-const PIECE_ATTACK_ID_VALUES: [usize; 6]  = [1,2,2,3,5,3];
 
+const PIECE_ATTACK_CONSTANTS: [u32; 6] = [0, 20, 20, 40, 80, 0];
+const ATTACK_WEIGHT: [u32; 20] = [0, 50, 75, 88, 94, 97, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100];
 
-const SAFETY_TABLE: [i32; 100] = [
-    0,  0,   1,   2,   3,   5,   7,   9,  12,  15,
-  18,  22,  26,  30,  35,  39,  44,  50,  56,  62,
-  68,  75,  82,  85,  89,  97, 105, 113, 122, 131,
- 140, 150, 169, 180, 191, 202, 213, 225, 237, 248,
- 260, 272, 283, 295, 307, 319, 330, 342, 354, 366,
- 377, 389, 401, 412, 424, 436, 448, 459, 471, 483,
- 494, 500, 500, 500, 500, 500, 500, 500, 500, 500,
- 500, 500, 500, 500, 500, 500, 500, 500, 500, 500,
- 500, 500, 500, 500, 500, 500, 500, 500, 500, 500,
- 500, 500, 500, 500, 500, 500, 500, 500, 500, 500
-];
 

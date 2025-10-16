@@ -1,7 +1,6 @@
-use crate::{bitboard_helpers::{get_lsb, pop_lsb}, constants::{BLACK, FILEA, FILEH, FILES, WHITE}, evaluation::{phase::get_phase_val, Evaluator}, moving::move_generation::MoveGenerator, position::board::Board};
+use crate::{bitboard_helpers::{get_lsb, pop_lsb}, constants::{BISHOP, BLACK, FILEA, FILEH, FILES, KNIGHT, PAWN, QUEEN, ROOK, WHITE}, evaluation::{phase::get_phase_val, Evaluator}, moving::move_generation::MoveGenerator, position::board::Board};
 
 pub struct PreEvalResult {
-    pub attack_maps: [SimpAttackMap; 2],
     pub half_open_files: [u64; 2],
     pub open_files: u64,
     pub phase: i32
@@ -28,48 +27,7 @@ impl Evaluator {
         half_open_files_arr[WHITE] &= !open_files;
 
         let phase = get_phase_val(board);
-        let white_attack_map = SimpAttackMap::new(board, &board.mg, WHITE);
-        let black_atttack_map = SimpAttackMap::new(board, &board.mg, BLACK);
-        PreEvalResult {attack_maps: [black_atttack_map, white_attack_map], half_open_files: half_open_files_arr, open_files, phase}
+        PreEvalResult {half_open_files: half_open_files_arr, open_files, phase}
     }
 }
 
-pub struct SimpAttackMap {
-    pub attack_maps: [u64; 6],
-}
-
-impl SimpAttackMap {
-    pub fn new(board: &Board, mg: &MoveGenerator, color: usize) -> Self {
-        let pieces = board.get_pieces(color);
-
-        let pawn_attacks = if board.us == WHITE {
-            let pawns = pieces.get_pawns();
-            ((pawns & !FILEA) << 7) | ((pawns & !FILEH) << 9)
-        } else {
-            let pawns = pieces.get_pawns();
-            ((pawns & !FILEA) >> 9) | ((pawns & !FILEH) >> 7)
-        };
-
-        let occ = board.get_occupancy();
-
-        let knight_attacks = compute_piece_attacks(pieces.get_knights(), |sq| mg.get_knight_attacks(sq));
-        let bishop_attacks = compute_piece_attacks(pieces.get_bishops(), |sq| mg.get_bishop_attacks(sq, occ));
-        let rook_attacks = compute_piece_attacks(pieces.get_rooks(), |sq| mg.get_rook_attacks(sq, occ));
-        let queen_attacks = compute_piece_attacks(pieces.get_queens(), |sq| mg.get_rook_attacks(sq, occ) | mg.get_bishop_attacks(sq, occ));
-        let king_attacks = mg.get_king_attacks(get_lsb(&pieces.get_king()));
-
-        SimpAttackMap {attack_maps: [pawn_attacks, knight_attacks, bishop_attacks, rook_attacks, queen_attacks, king_attacks]}
-    }
-}
-
-fn compute_piece_attacks<F>(mut piece_bb: u64, op: F) -> u64 
-where 
-    F: Fn(usize) -> u64,
-{
-    let mut result = 0u64;
-    while piece_bb != 0 {
-        let lsb = pop_lsb(&mut piece_bb);
-        result |= op(lsb);
-    }
-    result
-}
