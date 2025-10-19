@@ -54,7 +54,6 @@ impl ZobristHasher {
     }
 
     pub fn toggle_sq_piece(&mut self, square: usize, piece: usize, color: usize) {
-        //piece - 1 because 0 indicates NONE piece
         self.hash ^= self.square_piece[square + piece * 64 + color * 384];
     }
 

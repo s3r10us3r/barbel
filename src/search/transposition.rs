@@ -1,4 +1,5 @@
 const K: usize = 23;
+const GEN_DIFF: i32 = 5;
 
 #[derive(Clone, Copy, Default)]
 pub enum TTEntryType {
@@ -46,7 +47,7 @@ impl TTable {
     pub fn store(&mut self, new: Entry) {
         let index = (new.key as usize) & self.mask;
         let existing = &self.table[index];
-        if existing.is_none() || existing.is_some_and(|e| e.depth_left < new.depth_left) {
+        if existing.is_none() || existing.is_some_and(|e| e.depth_left <= new.depth_left || new.generation - e.generation >= GEN_DIFF) {
             self.table[index] = Some(new);
         }
     }

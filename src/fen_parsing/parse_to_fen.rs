@@ -13,6 +13,16 @@ impl Board {
         strings.join(" ")
     }
 
+    pub fn to_fen_no_clocks(&self) -> String {
+        let strings: Vec<String> = vec![
+            self.parse_pieces(),
+            self.parse_side_to_move(),
+            self.parse_castling_rights(),
+            self.parse_en_passant_file(),
+        ];
+        strings.join(" ")
+    }
+
     fn parse_pieces(&self) -> String {
         let white_piece_set = &self.players[WHITE];
         let black_piece_set = &self.players[BLACK];

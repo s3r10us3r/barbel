@@ -1,7 +1,7 @@
 use regex::Regex;
 
 use super::engine::Engine;
-use crate::{tests::{nps::make_nps, test_suites::NOLOT, wac::wac_test}, uci::perft::make_perft};
+use crate::{tests::{nps::make_nps, test_suites::NOLOT, transpositions::test_transpositions, wac::wac_test}, uci::perft::make_perft};
 use core::panic::PanicInfo;
 use std::{
     env, fs, io::{self, Write}, process::exit
@@ -71,8 +71,26 @@ impl UciController {
                 //TODO: Move this to engine so it can be later threaded
                 "wac" => wac_test(),
                 "nps" => nps_test(),
+                "tt_test"=> self.tt_test(),
                 _ => self.invalid_command(&t),
             }
+        }
+    }
+
+    fn tt_test(&mut self) {
+        let token = self.pop_token();
+        match token {
+            Some(t) => {
+                let num = t.parse::<i32>();
+                if let Ok(n) = num {
+                    let board = self.engine.get_board_mut();
+                    let (false_positives, false_negatives) = test_transpositions(board, n);
+                    println!("Found {false_positives} false positives and {false_negatives} false negatives at depth {n}");
+                } else {
+                    println!("Invalid argument");
+                }
+            }
+            _ => println!("Please provide an argument!")
         }
     }
 

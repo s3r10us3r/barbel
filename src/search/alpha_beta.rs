@@ -83,10 +83,11 @@ impl Searcher {
 
     pub fn search_to_time(&mut self, board: &mut Board, time: u64, cut: bool) -> SearchResult {
         self.nodes_searched = 0;
-        self.pv_table = PvTable::new(50);
+        self.pv_table = PvTable::new(100);
         self.stop.store(false, Ordering::Relaxed);
         let time = time as u128;
         let start = Instant::now();
+        let fallback_mv = board.mg.generate_moves(board).get_move(0).clone();
 
         thread::scope(|s| {
             let stop = Arc::clone(&self.stop);
@@ -118,7 +119,11 @@ impl Searcher {
                 thread::sleep(Duration::from_millis(2));
             }
             stop.store(true, Ordering::Relaxed);
-            handle.join().unwrap()
+            let result = handle.join();
+            match result {
+                Ok(sr) => sr,
+                Err(_) => SearchResult { mv: fallback_mv, nodes_searched: 0, depth_reached: 0, ttable_hits: 0 }
+            }
         })
     }
 
@@ -136,32 +141,25 @@ impl Searcher {
         best_value
     }
 
-    pub fn nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
+    pub fn nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, mut beta: i32) -> i32 {
         if self.stop.load(Ordering::Relaxed) {
             return alpha;
         }
         if depth == self.search_depth {
             return self.quiesce_nega_max(board, depth, alpha, beta);
         }
-        let org_alpha = alpha;
         let depth_left = self.search_depth - depth;
         self.nodes_searched += 1;
         let hash = board.get_hash();
 
-        //ttable probe
-        //we avoid probing at root
-        if depth != 0 {
-            if let Some(e) = self.ttable.probe(hash) {
-                self.ttable_hits += 1;
-                if e.depth_left >= depth_left {
-                    match e.entry_type {
-                        TTEntryType::Exact => return e.score,
-                        TTEntryType::Lower => alpha = alpha.max(e.score),
-                        TTEntryType::Upper => {
-                            if e.score <= alpha {return e.score;}
-                        }
-                    }
-                    if alpha >= beta { return alpha; }
+        if let Some(e) = self.ttable.probe(hash) {
+            self.ttable_hits += 1;
+            if e.depth_left >= depth_left {
+                match e.entry_type {
+                    TTEntryType::Exact => return e.score,
+                    TTEntryType::Lower if e.score >= beta => return e.score,
+                    TTEntryType::Upper if e.score <= alpha => return e.score,
+                    _ => {}
                 }
             }
         }
@@ -186,8 +184,8 @@ impl Searcher {
             if alpha >= beta { break } 
         }
 
-        let tt_type = if best_score >= beta {TTEntryType::Lower}
-                                      else if best_score <= org_alpha {TTEntryType::Upper}
+       let tt_type = if best_score == alpha {TTEntryType::Lower}
+                                      else if best_score == beta {TTEntryType::Upper}
                                       else {TTEntryType::Exact};
         self.store_tt(hash, best_score, depth_left, tt_type);
         best_score
