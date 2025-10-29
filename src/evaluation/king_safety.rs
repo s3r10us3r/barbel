@@ -2,42 +2,14 @@ use crate::{bitboard_helpers::{flip_color, get_file, get_lsb, pop_lsb}, constant
 
 impl Evaluator {
     pub fn evaluate_king_safety(&self, board: &Board, color: usize, pre_eval_result: &PreEvalResult) -> i32 {
-        let mut pawn_shield_score = 0;
         let us = board.get_pieces(color);
-        if !(board.get_state().can_castle_kingside(color) || board.get_state().can_castle_queenside(color)) {
-            pawn_shield_score += self.score_pawn_shield(us.get_king(), us.get_pawns(), color);
-        }
         let our_king_sq = get_lsb(&us.get_king());
 
         let king_safety_score = self.score_king_zone_attacks_simp(our_king_sq, board.get_pieces(flip_color(color)), &board.mg, color, board.get_occupancy());
-        let score = pawn_shield_score + king_safety_score;
+        let score = king_safety_score;
         interp_phase(score, 0, pre_eval_result.phase)
     }
 
-    /*
-    * this function returns a penalty (already negated) for a pawn shield - pawns guarding the king
-    * after castle
-    */
-    fn score_pawn_shield(&self, king: u64, pawns: u64, color: usize) -> i32 {
-        let mut penalty = 0;
-        let file = get_file(king);
-        let king_sq = king.trailing_zeros() as i32;
-        let dir = if color == WHITE { 1i32 } else { -1i32 };
-
-        //left
-        if file > 0 {
-            penalty += self.king_shield_file_pen(king_sq - 1, dir, pawns);
-        }
-        //in front 
-        penalty += self.king_shield_file_pen(king_sq, dir, pawns);
-        //right 
-        if file < 7 {
-            penalty += self.king_shield_file_pen(king_sq + 1, dir, pawns);
-        }
-        penalty
-    }
-
-    // BUG: shift overflow
     fn king_shield_file_pen(&self, mut sq: i32, dir: i32, pawns: u64) -> i32 {
         //this is the only place this can overflow since there are no pawns on the last rank
         sq += 8 * dir;

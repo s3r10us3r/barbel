@@ -18,6 +18,10 @@ impl Move {
         }
     }
 
+    pub fn get_value(&self) -> u16 {
+        self.value
+    }
+
     pub fn null() -> Move {
         Move { value: 0 }
     }
@@ -70,6 +74,10 @@ impl Move {
     pub fn new_promotion_capture(start: u16, target: u16, piece: usize) -> Move {
         let code = 12 + piece - 1;
         Self::new(start, target, code as u16)
+    }
+
+    pub fn new_from_val(val: u16) -> Move {
+        Move {value: val}
     }
 
     pub fn is_capture(&self) -> bool {

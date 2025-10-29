@@ -5,10 +5,12 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use crate::evaluation::Evaluator;
+use crate::search::move_ordering::{OrderedMovesIter, QuiesceOrderedMovesIter};
+use crate::search::move_ordering_mvv_lva::MoveOrdererMVVLVA;
 use crate::search::transposition::TTEntryType;
 use crate::{
     position::board::Board, constants::WHITE, 
-    moving::{move_list::MoveList, mv::Move}
+    moving::mv::Move
 };
 
 use super::{
@@ -141,7 +143,7 @@ impl Searcher {
         best_value
     }
 
-    pub fn nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, mut beta: i32) -> i32 {
+    pub fn nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop.load(Ordering::Relaxed) {
             return alpha;
         }
@@ -165,17 +167,18 @@ impl Searcher {
         }
 
 
-        let mut moves = board.mg.generate_moves(board);
-        self.order_moves(&mut moves, depth);
+        let moves = board.mg.generate_moves(board);
         if moves.get_count() == 0 {
            return if board.is_check() { -MATE+depth } else { 0 }
         }
-
+        let mut ordered_moves = OrderedMovesIter::new(moves, self.pv_table.get_best(depth as usize));
+        // let mut ordered_moves = MoveOrdererMVVLVA::new(&moves, board, self.pv_table.get_best(depth as usize));
         let mut best_score = i32::MIN;
-        for mv in moves.iter() {
-            board.make_move(mv);
+
+        while let Some(mv) = ordered_moves.next(board) {
+            board.make_move(&mv);
             let score = -self.nega_max(board, depth + 1, -beta, -alpha);
-            board.unmake_move(mv);
+            board.unmake_move(&mv);
             if score > best_score {
                 best_score = score;
                 self.pv_table.update(depth as usize, mv.clone());
@@ -223,13 +226,16 @@ impl Searcher {
         if alpha < best_value {
             alpha = best_value
         }
-        for mv in moves.iter() {
+
+        let mut ordered_moves = QuiesceOrderedMovesIter::new(moves);
+        // let mut ordered_moves = MoveOrdererMVVLVA::new(&moves, board, Move::null());
+        while let Some(mv) = ordered_moves.next(board) {
             if !mv.is_capture() {
                 continue;
             }
-            board.make_move(mv);
+            board.make_move(&mv);
             let score = -self.quiesce_nega_max(board, depth + 1, -beta, -alpha);
-            board.unmake_move(mv);
+            board.unmake_move(&mv);
             if score > best_value {
                 best_value = score;
                 if score > alpha {
@@ -241,21 +247,6 @@ impl Searcher {
             }
         }
         best_value
-    }
-
-    fn order_moves(&self, move_list: &mut MoveList, ply: i32) {
-        let best = self.pv_table.get_best(ply as usize);
-        if best.is_null() {
-            return;
-        }
-        let cnt = move_list.get_count();
-        let moves = move_list.moves();
-        for i in 0..cnt {
-            if moves[i] == best {
-                moves.swap(0, i);
-                break;
-            }
-        }
     }
 
     pub fn get_nodes_searched(&self) -> i32 {

@@ -1,27 +1,20 @@
-use crate::{bitboard_helpers::pop_lsb, position::{board::Board, piece_set::PieceSet}, constants::{BISHOP, BLACK, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}};
+use crate::{bitboard_helpers::pop_lsb, constants::{BISHOP, BLACK, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}, evaluation::{phase::{self, interp_phase}, preliminary::PreEvalResult}, position::{board::Board, piece_set::PieceSet}};
 
-pub fn score_piece_squares(board: &Board) -> i32 {
-    let score = score_piece_squares_phase(board, &MG_TABLE);
-    if board.us == BLACK {
-        -score
-    } else {
-        score
-    }
+pub fn score_piece_squares(board: &Board, pre_eval_result: &PreEvalResult) -> i32 {
+    score_ps(board.get_pieces(WHITE), &MG_TABLE, score_table_white, pre_eval_result.phase) - 
+        score_ps(board.get_pieces(BLACK), &MG_TABLE, score_table_black, pre_eval_result.phase)
 }
 
-fn score_piece_squares_phase(board: &Board, table: &BarbelTable) -> i32 {
-    score_ps(board.get_pieces(WHITE), table, score_table_white) - 
-        score_ps(board.get_pieces(BLACK), table, score_table_black)
-}
-
-fn score_ps<F>(ps: &PieceSet, table: &BarbelTable, f: F) -> i32 
+fn score_ps<F>(ps: &PieceSet, table: &BarbelTable, f: F, phase: i32) -> i32 
 where F: Fn(u64, &[i32; 64]) -> i32 {
     let mut score = f(ps.get_pawns(), &table[PAWN]);
     score += f(ps.get_knights(), &table[KNIGHT]);
     score += f(ps.get_bishops(), &table[BISHOP]);
     score += f(ps.get_rooks(), &table[ROOK]);
     score += f(ps.get_queens(), &table[QUEEN]);
-    score += f(ps.get_king(), &table[KING]);
+    let mg_king_score = f(ps.get_king(), &table[KING]);
+    let eg_king_score = f(ps.get_king(), &EG_KING_TABLE);
+    score += interp_phase(mg_king_score, eg_king_score, phase);
     score
 }
 
@@ -47,6 +40,7 @@ fn score_table_black(mut pieces: u64, table: &[i32; 64]) -> i32 {
 }
 
 type BarbelTable = [[i32; 64]; 6];
+
 
 const MG_TABLE: BarbelTable = [
     MG_PAWN_TABLE,
@@ -122,3 +116,15 @@ const MG_KING_TABLE: [i32; 64] = [
       1,   7,  -8, -64, -43, -16,   9,   8,
     -15,  36,  12, -54,   8, -28,  24,  14,
 ];
+
+const EG_KING_TABLE: [i32; 64] = [
+    -50,-40,-30,-20,-20,-30,-40,-50,
+    -30,-20,-10,  0,  0,-10,-20,-30,
+    -30,-10, 20, 30, 30, 20,-10,-30,
+    -30,-10, 30, 40, 40, 30,-10,-30,
+    -30,-10, 30, 40, 40, 30,-10,-30,
+    -30,-10, 20, 30, 30, 20,-10,-30,
+    -30,-30,  0,  0,  0,  0,-30,-30,
+    -50,-30,-30,-30,-30,-30,-30,-50
+]; 
+
