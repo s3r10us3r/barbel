@@ -5,8 +5,8 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use crate::evaluation::Evaluator;
+use crate::search::history::HistoryTable;
 use crate::search::move_ordering::{OrderedMovesIter, QuiesceOrderedMovesIter};
-use crate::search::move_ordering_mvv_lva::MoveOrdererMVVLVA;
 use crate::search::transposition::TTEntryType;
 use crate::{
     position::board::Board, constants::WHITE, 
@@ -34,6 +34,7 @@ pub struct SearchResult {
 pub struct Searcher {
     ttable: TTable,
     pv_table: PvTable,
+    history: HistoryTable,
     evaluator: Evaluator,
     search_depth: i32,
     ttable_hits: i32,
@@ -52,7 +53,8 @@ impl Default for Searcher {
             ttable_hits: 0,
             nodes_searched: 0,
             generation: 0,
-            stop: Arc::new(AtomicBool::new(false))
+            stop: Arc::new(AtomicBool::new(false)),
+            history: HistoryTable::new()
         }
     }
 }
@@ -171,13 +173,15 @@ impl Searcher {
         if moves.get_count() == 0 {
            return if board.is_check() { -MATE+depth } else { 0 }
         }
-        let mut ordered_moves = OrderedMovesIter::new(moves, self.pv_table.get_best(depth as usize));
-        // let mut ordered_moves = MoveOrdererMVVLVA::new(&moves, board, self.pv_table.get_best(depth as usize));
+
+        let pv_node = self.pv_table.get_best(depth as usize);
+        let mut ordered_moves = OrderedMovesIter::new(moves, pv_node, board, &self.history);
         let mut best_score = i32::MIN;
 
-        while let Some(mv) = ordered_moves.next(board) {
+        while let Some(mv) = ordered_moves.next() {
             board.make_move(&mv);
             let score = -self.nega_max(board, depth + 1, -beta, -alpha);
+            self.history.add(&mv, depth_left);
             board.unmake_move(&mv);
             if score > best_score {
                 best_score = score;
@@ -227,9 +231,8 @@ impl Searcher {
             alpha = best_value
         }
 
-        let mut ordered_moves = QuiesceOrderedMovesIter::new(moves);
-        // let mut ordered_moves = MoveOrdererMVVLVA::new(&moves, board, Move::null());
-        while let Some(mv) = ordered_moves.next(board) {
+        let mut ordered_moves = QuiesceOrderedMovesIter::new(moves, board, &self.history);
+        while let Some(mv) = ordered_moves.next() {
             if !mv.is_capture() {
                 continue;
             }

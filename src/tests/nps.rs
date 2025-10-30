@@ -17,7 +17,8 @@ pub fn make_nps(positions: &str, search_depth: i32) -> NpsResult {
         let mut searcher = Searcher::new();
 
         let start = Instant::now();
-        searcher.search_to_depth(&mut epd.position, search_depth);
+        //searcher.search_to_depth(&mut epd.position, search_depth);
+        searcher.search_to_time(&mut epd.position, 2000, false);
         let duration = start.elapsed();
         time += duration.as_millis();
         nodes += searcher.get_nodes_searched() as u64;
