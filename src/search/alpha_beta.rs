@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use crate::evaluation::Evaluator;
+use crate::position::piece_set::PieceSet;
 use crate::search::history::HistoryTable;
 use crate::search::move_ordering::{OrderedMovesIter, QuiesceOrderedMovesIter};
 use crate::search::transposition::TTEntryType;
@@ -21,6 +22,7 @@ use super::{
 
 const INFINITY: i32 = 10_000_000;
 const MATE: i32 = 1_000_000;
+const NULL_MOVE_RED: i32 = 3;
 
 
 pub struct SearchResult {
@@ -28,6 +30,7 @@ pub struct SearchResult {
     pub nodes_searched: i32,
     pub depth_reached: i32,
     pub ttable_hits: i32,
+    pub nmp_hits: i32,
 }
 
 
@@ -40,6 +43,7 @@ pub struct Searcher {
     ttable_hits: i32,
     nodes_searched: i32,
     generation: i32,
+    nmp_hits: i32,
     stop: Arc<AtomicBool>,
 }
 
@@ -53,6 +57,7 @@ impl Default for Searcher {
             ttable_hits: 0,
             nodes_searched: 0,
             generation: 0,
+            nmp_hits: 0,
             stop: Arc::new(AtomicBool::new(false)),
             history: HistoryTable::new()
         }
@@ -71,7 +76,7 @@ impl Searcher {
             self.make_search(board, i);
         }
         let mv = self.pv_table.get_best(0);
-        SearchResult { depth_reached: self.search_depth, mv, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits }
+        SearchResult { depth_reached: self.search_depth, mv, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits, nmp_hits: self.nmp_hits }
     }
 
     pub fn search_with_time(&mut self, board: &mut Board, wtime: u64, btime: u64, winc: u64, binc: u64) -> SearchResult {
@@ -116,7 +121,7 @@ impl Searcher {
                     best = *moves.get_move(0);
                 }
                 self.stop.store(true, Ordering::Relaxed);
-                SearchResult { depth_reached: self.search_depth, mv: best, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits }
+                SearchResult { depth_reached: self.search_depth, mv: best, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits, nmp_hits: self.nmp_hits }
             });
 
             while start.elapsed().as_millis() < time && !stop.load(Ordering::Relaxed) {
@@ -126,7 +131,7 @@ impl Searcher {
             let result = handle.join();
             match result {
                 Ok(sr) => sr,
-                Err(_) => SearchResult { mv: fallback_mv, nodes_searched: 0, depth_reached: 0, ttable_hits: 0 }
+                Err(_) => SearchResult { mv: fallback_mv, nodes_searched: 0, depth_reached: 0, ttable_hits: 0 , nmp_hits: 0 }
             }
         })
     }
@@ -135,11 +140,12 @@ impl Searcher {
         self.generation += 1;
         self.search_depth = depth;
         self.ttable_hits = 0;
+        self.nmp_hits = 0;
         let best_value = self.nega_max(board, 0, -INFINITY, INFINITY);
         if !self.stop.load(Ordering::Relaxed) {
             println!(
-                "info depth {} cp {} tthits {} nodes searched {} pv {}",
-                depth, best_value, self.ttable_hits, self.nodes_searched, self.pv_table.get_pv_string()
+                "info depth {} cp {} tthits {} nodes searched {} nmp hits {} pv {}",
+                depth, best_value, self.ttable_hits, self.nodes_searched, self.nmp_hits, self.pv_table.get_pv_string()
             );
         }
         best_value
@@ -170,6 +176,17 @@ impl Searcher {
             }
         }
 
+        
+        // null move reduction
+        if !self.is_in_zugzwang(board.get_ally_pieces()) && depth_left > NULL_MOVE_RED && !board.is_check() {
+            board.make_null_mv();
+            let nmr_score = -self.nega_max(board, depth + NULL_MOVE_RED, -beta, -beta + 1);
+            board.unmake_null_move();
+            if nmr_score >= beta {
+                self.nmp_hits += 1;
+                return beta;
+            }
+        }
 
         let mut ordered_moves = OrderedMovesIter::new(hash_move);
         let mut best_score = i32::MIN;
@@ -214,6 +231,9 @@ impl Searcher {
         self.ttable.store(entry);
     }
 
+    fn is_in_zugzwang(&self, pieces: &PieceSet) -> bool {
+        pieces.get_orthogonals() | pieces.get_diagonals() | pieces.get_knights() == 0
+    }
 
     pub fn quiesce_nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop.load(Ordering::Relaxed) {
