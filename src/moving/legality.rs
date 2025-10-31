@@ -1,5 +1,4 @@
 use crate::{bitboard_helpers::*, constants::WHITE, moving::{move_generation::MoveGenerator, move_list::MoveList, mv::Move}, position::board::Board};
-
 impl MoveGenerator {
     pub fn filter_illegal_moves_when_check(&self, move_list: &mut MoveList, board: &Board, checker: u64) {
         let (us, enemy) = board.get_piecesets();
@@ -81,6 +80,7 @@ impl Board {
             self.is_normal_move_legal(mv, king)
         }
     }
+
 
     pub fn is_en_passant_legal(&self, mv: &Move) -> bool {
         let cap_sq = if self.us == WHITE {

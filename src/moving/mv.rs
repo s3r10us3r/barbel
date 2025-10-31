@@ -1,6 +1,6 @@
 use crate::constants::*;
 
-#[derive(Default, PartialEq)]
+#[derive(Default, PartialEq, Copy)]
 pub struct Move {
     value: u16,
 }

@@ -91,7 +91,7 @@ impl Searcher {
         self.stop.store(false, Ordering::Relaxed);
         let time = time as u128;
         let start = Instant::now();
-        let fallback_mv = board.mg.generate_moves(board).get_move(0).clone();
+        let fallback_mv = *board.mg.generate_moves(board).get_move(0);
 
         thread::scope(|s| {
             let stop = Arc::clone(&self.stop);
@@ -113,7 +113,7 @@ impl Searcher {
                 }
                 if best.is_null() {
                     let moves = board.mg.generate_moves(board);
-                    best = moves.get_move(0).clone();
+                    best = *moves.get_move(0);
                 }
                 self.stop.store(true, Ordering::Relaxed);
                 SearchResult { depth_reached: self.search_depth, mv: best, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits }
@@ -156,7 +156,9 @@ impl Searcher {
         self.nodes_searched += 1;
         let hash = board.get_hash();
 
+        let mut hash_move = Move::null();
         if let Some(e) = self.ttable.probe(hash) {
+            hash_move = e.best_move;
             self.ttable_hits += 1;
             if e.depth_left >= depth_left {
                 match e.entry_type {
@@ -169,42 +171,45 @@ impl Searcher {
         }
 
 
-        let moves = board.mg.generate_moves(board);
-        if moves.get_count() == 0 {
-           return if board.is_check() { -MATE+depth } else { 0 }
-        }
-
-        let pv_node = self.pv_table.get_best(depth as usize);
-        let mut ordered_moves = OrderedMovesIter::new(moves, pv_node, board, &self.history);
+        let mut ordered_moves = OrderedMovesIter::new(hash_move);
         let mut best_score = i32::MIN;
+        let mut best_move = Move::null();
 
-        while let Some(mv) = ordered_moves.next() {
+        while let Some(mv) = ordered_moves.next(board, &self.history) {
             board.make_move(&mv);
             let score = -self.nega_max(board, depth + 1, -beta, -alpha);
-            self.history.add(&mv, depth_left);
             board.unmake_move(&mv);
+
+            self.history.add(&mv, depth_left);
             if score > best_score {
                 best_score = score;
-                self.pv_table.update(depth as usize, mv.clone());
+                self.pv_table.update(depth as usize, mv);
                 alpha = alpha.max(score);
+                best_move = mv;
             }
             if alpha >= beta { break } 
+        }
+
+        //no moves
+        if best_move.is_null() {
+           return if board.is_check() { -MATE+depth } else { 0 }
         }
 
        let tt_type = if best_score == alpha {TTEntryType::Lower}
                                       else if best_score == beta {TTEntryType::Upper}
                                       else {TTEntryType::Exact};
-        self.store_tt(hash, best_score, depth_left, tt_type);
+        self.store_tt(hash, best_score, depth_left, tt_type, best_move);
         best_score
     }
 
-    fn store_tt(&mut self, hash: u64, score: i32, depth_left: i32, tt_type: TTEntryType) {
+    fn store_tt(&mut self, hash: u64, score: i32, depth_left: i32, tt_type: TTEntryType, best_move: Move) {
         let entry = Entry {
             key: hash,
             depth_left,
             entry_type: tt_type,
             generation: self.generation,
             score,
+            best_move
         };
         self.ttable.store(entry);
     }
@@ -233,9 +238,6 @@ impl Searcher {
 
         let mut ordered_moves = QuiesceOrderedMovesIter::new(moves, board, &self.history);
         while let Some(mv) = ordered_moves.next() {
-            if !mv.is_capture() {
-                continue;
-            }
             board.make_move(&mv);
             let score = -self.quiesce_nega_max(board, depth + 1, -beta, -alpha);
             board.unmake_move(&mv);

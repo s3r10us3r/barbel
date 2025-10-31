@@ -1,3 +1,5 @@
+use crate::moving::mv::Move;
+
 const K: usize = 23;
 const GEN_DIFF: i32 = 5;
 
@@ -18,6 +20,7 @@ pub struct Entry {
     pub score: i32,
     pub generation: i32,
     pub entry_type: TTEntryType,
+    pub best_move: Move
 }
 
 

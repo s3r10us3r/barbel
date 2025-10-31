@@ -1,13 +1,14 @@
-use crate::{constants::PAWN, evaluation::piece_values::MIDGAME_PIECE_VALUES, moving::{move_list::MoveList, mv::Move}, position::board::Board, search::history::{self, HistoryTable}};
+use crate::{constants::PAWN, evaluation::piece_values::MIDGAME_PIECE_VALUES, moving::{move_list::MoveList, mv::Move}, position::board::Board, search::history::{HistoryTable}};
 
 pub struct OrderedMovesIter {
     moves: Vec<ClassifiedMove>,
     phase: MoveOrderingPhase,
-    pv_node: Option<Move>,
+    pv_node: Move,
 }
 
 enum MoveOrderingPhase {
     PvNode,
+    Generation,
     Promotions,
     WinningCaptures,
     EqualCaptures,
@@ -19,36 +20,33 @@ enum MoveOrderingPhase {
 const V_FACTOR: i32 = 8; //this is how many times more valuable the victim is than the attacker
 
 impl OrderedMovesIter {
-    pub fn new(mut moves: MoveList, pv_node: Move, board: &Board, hist: &HistoryTable) -> Self {
-        let mut pv_node_u = None;
-        if !pv_node.is_null() {
-            for i in 0..moves.get_count() {
-                if *moves.get_move(i) == pv_node {
-                    moves.remove(i);
-                    pv_node_u = Some(pv_node);
-                    break;
-                }
+    pub fn new(pv_node: Move) -> Self {
+        OrderedMovesIter { moves: Vec::new(), phase: MoveOrderingPhase::PvNode, pv_node }
+    }
+
+    fn next_pv_node(&mut self, board: &Board, hist: &HistoryTable) -> Option<Move> {
+        self.phase = MoveOrderingPhase::Generation;
+        if !self.pv_node.is_null() && board.is_legal(&self.pv_node) {
+            Some(self.pv_node)
+        } else {
+            self.next(board, hist)
+        }
+    }
+
+    fn generate_moves(&mut self, board: &Board, hist: &HistoryTable) -> Option<Move> {
+        let mvs = board.mg.generate_moves(board);
+        let mut classified_moves: Vec<ClassifiedMove> = Vec::with_capacity(mvs.get_count());
+        for mv in mvs.iter() {
+            if *mv != self.pv_node {
+                classified_moves.push(classify_move(*mv, board, hist));
             }
         }
-
-        let mut move_kinds: Vec<ClassifiedMove> = Vec::with_capacity(moves.get_count());
-        for mv in moves.iter() {
-            let move_kind = classify_move(mv.clone(), board, hist);
-            move_kinds.push(move_kind);
-        }
-        OrderedMovesIter { moves: move_kinds, phase: MoveOrderingPhase::PvNode, pv_node: pv_node_u }
-    }
-
-    fn next_pv_node(&mut self) -> Option<Move> {
+        self.moves = classified_moves;
         self.phase = MoveOrderingPhase::Promotions;
-        if self.pv_node.is_some() {
-            self.pv_node.clone()
-        } else {
-            self.next()
-        }
+        self.next(board, hist)
     }
 
-    fn next_by_kind(&mut self, kind: MoveKind, next_phase: MoveOrderingPhase) -> Option<Move> {
+    fn next_by_kind(&mut self, board: &Board,  hist: &HistoryTable, kind: MoveKind, next_phase: MoveOrderingPhase) -> Option<Move> {
         let mut best_i = 0;
         let mut best_score = i32::MIN; 
 
@@ -65,18 +63,19 @@ impl OrderedMovesIter {
             Some(mv.mv)
         } else {
             self.phase = next_phase;
-            self.next()
+            self.next(board, hist)
         }
     }
 
-    pub fn next(&mut self) -> Option<Move> {
+    pub fn next(&mut self, board: &Board, hist: &HistoryTable) -> Option<Move> {
         match self.phase {
-            MoveOrderingPhase::PvNode => self.next_pv_node(),
-            MoveOrderingPhase::Promotions => self.next_by_kind(MoveKind::Promotion, MoveOrderingPhase::WinningCaptures),
-            MoveOrderingPhase::WinningCaptures => self.next_by_kind(MoveKind::WinningCapture, MoveOrderingPhase::EqualCaptures),
-            MoveOrderingPhase::EqualCaptures => self.next_by_kind(MoveKind::EqualCapture, MoveOrderingPhase::Quiet),
-            MoveOrderingPhase::Quiet => self.next_by_kind(MoveKind::QuietMove, MoveOrderingPhase::LosingCaptures),
-            MoveOrderingPhase::LosingCaptures => self.next_by_kind(MoveKind::LosingCapture, MoveOrderingPhase::Exhausted),
+            MoveOrderingPhase::PvNode => self.next_pv_node(board, hist),
+            MoveOrderingPhase::Generation => self.generate_moves(board, hist),
+            MoveOrderingPhase::Promotions => self.next_by_kind(board, hist, MoveKind::Promotion, MoveOrderingPhase::WinningCaptures),
+            MoveOrderingPhase::WinningCaptures => self.next_by_kind(board, hist, MoveKind::WinningCapture, MoveOrderingPhase::EqualCaptures),
+            MoveOrderingPhase::EqualCaptures => self.next_by_kind(board, hist, MoveKind::EqualCapture, MoveOrderingPhase::Quiet),
+            MoveOrderingPhase::Quiet => self.next_by_kind(board, hist, MoveKind::QuietMove, MoveOrderingPhase::LosingCaptures),
+            MoveOrderingPhase::LosingCaptures => self.next_by_kind(board, hist, MoveKind::LosingCapture, MoveOrderingPhase::Exhausted),
             MoveOrderingPhase::Exhausted => None
         }
     }
@@ -101,7 +100,7 @@ impl QuiesceOrderedMovesIter  {
         let mut move_kinds: Vec<ClassifiedMove> = Vec::with_capacity(moves.get_count());
         for mv in moves.iter() {
             if mv.is_promotion() || mv.is_capture() {
-                let move_kind = classify_move(mv.clone(), board, history);
+                let move_kind = classify_move(*mv, board, history);
                 move_kinds.push(move_kind);
             }
         }

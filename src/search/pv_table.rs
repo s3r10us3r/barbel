@@ -22,14 +22,14 @@ impl PvTable {
     }
 
     pub fn get_best(&self, ply: usize) -> Move {
-        self.table[self.index(ply, 0)].clone()
+        self.table[self.index(ply, 0)]
     }
 
     pub fn get_pv_string(&self) -> String {
         let mut i = 0;
         let mut res = Vec::new();
         while i < self.n && !self.table[self.index(0, i)].is_null() {
-            let mv = self.table[self.index(0, i)].clone();
+            let mv = self.table[self.index(0, i)];
             res.push(mv);
             i += 1;
         }
@@ -44,7 +44,7 @@ impl PvTable {
     fn movcpy(&mut self, mut target: usize, mut source: usize, mut n: usize) {
         while n != 0 && !self.table[source].is_null() {
             n -= 1;
-            self.table[target] = self.table[source].clone();
+            self.table[target] = self.table[source];
             target += 1;
             source += 1;
         }
