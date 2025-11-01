@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use crate::evaluation::Evaluator;
 use crate::position::piece_set::PieceSet;
 use crate::search::history::HistoryTable;
+use crate::search::killers::KillerTable;
 use crate::search::move_ordering::{OrderedMovesIter, QuiesceOrderedMovesIter};
 use crate::search::transposition::TTEntryType;
 use crate::{
@@ -38,6 +39,7 @@ pub struct Searcher {
     ttable: TTable,
     pv_table: PvTable,
     history: HistoryTable,
+    killers: KillerTable,
     evaluator: Evaluator,
     search_depth: i32,
     ttable_hits: i32,
@@ -59,7 +61,8 @@ impl Default for Searcher {
             generation: 0,
             nmp_hits: 0,
             stop: Arc::new(AtomicBool::new(false)),
-            history: HistoryTable::new()
+            history: HistoryTable::new(),
+            killers: KillerTable::new()
         }
     }
 }
@@ -141,6 +144,7 @@ impl Searcher {
         self.search_depth = depth;
         self.ttable_hits = 0;
         self.nmp_hits = 0;
+        self.killers = KillerTable::new();
         let best_value = self.nega_max(board, 0, -INFINITY, INFINITY);
         if !self.stop.load(Ordering::Relaxed) {
             println!(
@@ -188,11 +192,11 @@ impl Searcher {
             }
         }
 
-        let mut ordered_moves = OrderedMovesIter::new(hash_move);
+        let mut ordered_moves = OrderedMovesIter::new(hash_move, depth);
         let mut best_score = i32::MIN;
         let mut best_move = Move::null();
 
-        while let Some(mv) = ordered_moves.next(board, &self.history) {
+        while let Some(mv) = ordered_moves.next(board, &self.history, &self.killers) {
             board.make_move(&mv);
             let score = -self.nega_max(board, depth + 1, -beta, -alpha);
             board.unmake_move(&mv);
@@ -203,6 +207,9 @@ impl Searcher {
                 self.pv_table.update(depth as usize, mv);
                 alpha = alpha.max(score);
                 best_move = mv;
+            }
+            if score >= beta {
+                self.killers.update(depth, mv);
             }
             if alpha >= beta { break } 
         }
@@ -256,7 +263,7 @@ impl Searcher {
             alpha = best_value
         }
 
-        let mut ordered_moves = QuiesceOrderedMovesIter::new(moves, board, &self.history);
+        let mut ordered_moves = QuiesceOrderedMovesIter::new(moves, board, &self.history, &self.killers, depth);
         while let Some(mv) = ordered_moves.next() {
             board.make_move(&mv);
             let score = -self.quiesce_nega_max(board, depth + 1, -beta, -alpha);

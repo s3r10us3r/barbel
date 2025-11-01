@@ -3,3 +3,4 @@ mod pv_table;
 mod transposition;
 mod move_ordering;
 mod history;
+mod killers;

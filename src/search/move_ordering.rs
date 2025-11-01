@@ -1,9 +1,10 @@
-use crate::{constants::PAWN, evaluation::piece_values::MIDGAME_PIECE_VALUES, moving::{move_list::MoveList, mv::Move}, position::board::Board, search::history::{HistoryTable}};
+use crate::{constants::PAWN, evaluation::piece_values::MIDGAME_PIECE_VALUES, moving::{move_list::MoveList, mv::Move}, position::board::Board, search::{history::HistoryTable, killers::{self, KillerTable}}};
 
 pub struct OrderedMovesIter {
     moves: Vec<ClassifiedMove>,
     phase: MoveOrderingPhase,
     pv_node: Move,
+    ply: i32,
 }
 
 enum MoveOrderingPhase {
@@ -20,33 +21,33 @@ enum MoveOrderingPhase {
 const V_FACTOR: i32 = 8; //this is how many times more valuable the victim is than the attacker
 
 impl OrderedMovesIter {
-    pub fn new(pv_node: Move) -> Self {
-        OrderedMovesIter { moves: Vec::new(), phase: MoveOrderingPhase::PvNode, pv_node }
+    pub fn new(pv_node: Move, ply: i32) -> Self {
+        OrderedMovesIter { moves: Vec::new(), phase: MoveOrderingPhase::PvNode, pv_node, ply }
     }
 
-    fn next_pv_node(&mut self, board: &Board, hist: &HistoryTable) -> Option<Move> {
+    fn next_pv_node(&mut self, board: &Board, hist: &HistoryTable, killers: &KillerTable) -> Option<Move> {
         self.phase = MoveOrderingPhase::Generation;
         if !self.pv_node.is_null() && board.is_legal(&self.pv_node) {
             Some(self.pv_node)
         } else {
-            self.next(board, hist)
+            self.next(board, hist, killers)
         }
     }
 
-    fn generate_moves(&mut self, board: &Board, hist: &HistoryTable) -> Option<Move> {
+    fn generate_moves(&mut self, board: &Board, hist: &HistoryTable, killers: &KillerTable) -> Option<Move> {
         let mvs = board.mg.generate_moves(board);
         let mut classified_moves: Vec<ClassifiedMove> = Vec::with_capacity(mvs.get_count());
         for mv in mvs.iter() {
             if *mv != self.pv_node {
-                classified_moves.push(classify_move(*mv, board, hist));
+                classified_moves.push(classify_move(*mv, board, hist, killers, self.ply));
             }
         }
         self.moves = classified_moves;
         self.phase = MoveOrderingPhase::Promotions;
-        self.next(board, hist)
+        self.next(board, hist, killers)
     }
 
-    fn next_by_kind(&mut self, board: &Board,  hist: &HistoryTable, kind: MoveKind, next_phase: MoveOrderingPhase) -> Option<Move> {
+    fn next_by_kind(&mut self, board: &Board, hist: &HistoryTable, killers: &KillerTable, kind: MoveKind, next_phase: MoveOrderingPhase) -> Option<Move> {
         let mut best_i = 0;
         let mut best_score = i32::MIN; 
 
@@ -63,19 +64,19 @@ impl OrderedMovesIter {
             Some(mv.mv)
         } else {
             self.phase = next_phase;
-            self.next(board, hist)
+            self.next(board, hist, killers)
         }
     }
 
-    pub fn next(&mut self, board: &Board, hist: &HistoryTable) -> Option<Move> {
+    pub fn next(&mut self, board: &Board, hist: &HistoryTable, killers: &KillerTable) -> Option<Move> {
         match self.phase {
-            MoveOrderingPhase::PvNode => self.next_pv_node(board, hist),
-            MoveOrderingPhase::Generation => self.generate_moves(board, hist),
-            MoveOrderingPhase::Promotions => self.next_by_kind(board, hist, MoveKind::Promotion, MoveOrderingPhase::WinningCaptures),
-            MoveOrderingPhase::WinningCaptures => self.next_by_kind(board, hist, MoveKind::WinningCapture, MoveOrderingPhase::EqualCaptures),
-            MoveOrderingPhase::EqualCaptures => self.next_by_kind(board, hist, MoveKind::EqualCapture, MoveOrderingPhase::Quiet),
-            MoveOrderingPhase::Quiet => self.next_by_kind(board, hist, MoveKind::QuietMove, MoveOrderingPhase::LosingCaptures),
-            MoveOrderingPhase::LosingCaptures => self.next_by_kind(board, hist, MoveKind::LosingCapture, MoveOrderingPhase::Exhausted),
+            MoveOrderingPhase::PvNode => self.next_pv_node(board, hist, killers),
+            MoveOrderingPhase::Generation => self.generate_moves(board, hist, killers),
+            MoveOrderingPhase::Promotions => self.next_by_kind(board, hist, killers, MoveKind::Promotion, MoveOrderingPhase::WinningCaptures),
+            MoveOrderingPhase::WinningCaptures => self.next_by_kind(board, hist, killers, MoveKind::WinningCapture, MoveOrderingPhase::EqualCaptures),
+            MoveOrderingPhase::EqualCaptures => self.next_by_kind(board, hist, killers, MoveKind::EqualCapture, MoveOrderingPhase::Quiet),
+            MoveOrderingPhase::Quiet => self.next_by_kind(board, hist,  killers, MoveKind::QuietMove, MoveOrderingPhase::LosingCaptures),
+            MoveOrderingPhase::LosingCaptures => self.next_by_kind(board, hist, killers, MoveKind::LosingCapture, MoveOrderingPhase::Exhausted),
             MoveOrderingPhase::Exhausted => None
         }
     }
@@ -96,11 +97,11 @@ pub struct QuiesceOrderedMovesIter {
 }
 
 impl QuiesceOrderedMovesIter  {
-    pub fn new(moves: MoveList, board: &Board, history: &HistoryTable) -> Self {
+    pub fn new(moves: MoveList, board: &Board, history: &HistoryTable, killers: &KillerTable, ply: i32) -> Self {
         let mut move_kinds: Vec<ClassifiedMove> = Vec::with_capacity(moves.get_count());
         for mv in moves.iter() {
             if mv.is_promotion() || mv.is_capture() {
-                let move_kind = classify_move(*mv, board, history);
+                let move_kind = classify_move(*mv, board, history, killers, ply);
                 move_kinds.push(move_kind);
             }
         }
@@ -150,7 +151,7 @@ fn mvv_lva(aggressor: usize, victim: usize) -> i32 {
 }
 
 
-fn classify_move(mv: Move, board: &Board, history: &HistoryTable) -> ClassifiedMove {
+fn classify_move(mv: Move, board: &Board, history: &HistoryTable, killers: &KillerTable, ply: i32) -> ClassifiedMove {
     if mv.is_promotion() {
         let mut score = MIDGAME_PIECE_VALUES.values[mv.get_promotion_piece()];
         if mv.is_capture() {
@@ -176,7 +177,13 @@ fn classify_move(mv: Move, board: &Board, history: &HistoryTable) -> ClassifiedM
             ClassifiedMove::new(MoveKind::LosingCapture ,mvv_lva(aggressor, victim), mv)
         }
     } else {
-        ClassifiedMove::new(MoveKind::QuietMove, history.get_val(&mv), mv)
+        let hist_score = history.get_val(&mv);
+        let killer_score = if killers.is_killer(ply, &mv) {
+            1_000_000
+        } else {
+            0
+        };
+        ClassifiedMove::new(MoveKind::QuietMove, hist_score + killer_score, mv)
     }
 }
 
