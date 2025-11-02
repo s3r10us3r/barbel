@@ -1,12 +1,16 @@
-use crate::{bitboard_helpers::{flip_color, get_file, get_lsb, pop_lsb}, constants::{BISHOP, KNIGHT, QUEEN, ROOK, WHITE}, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, fen_parsing::parse_to_fen, moving::move_generation::MoveGenerator, position::{board::Board, piece_set::PieceSet}};
+use crate::{bitboard_helpers::{get_lsb, pop_lsb}, constants::{BISHOP, BLACK, KNIGHT, QUEEN, ROOK, WHITE}, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, fen_parsing::parse_to_fen, moving::move_generation::MoveGenerator, position::{board::Board, piece_set::PieceSet}};
 
 impl Evaluator {
-    pub fn evaluate_king_safety(&self, board: &Board, color: usize, pre_eval_result: &PreEvalResult) -> i32 {
-        let us = board.get_pieces(color);
-        let our_king_sq = get_lsb(&us.get_king());
+    pub fn evaluate_king_safety(&self, board: &Board, pre_eval_result: &PreEvalResult) -> i32 {
+        let white_pieces = board.get_pieces(WHITE);
+        let black_pieces = board.get_pieces(BLACK);
 
-        let king_safety_score = self.score_king_zone_attacks_simp(our_king_sq, board.get_pieces(flip_color(color)), &board.mg, color, board.get_occupancy());
-        let score = king_safety_score;
+        let white_king = white_pieces.get_king();
+        let black_king = black_pieces.get_king();
+        
+        let white_safety = self.score_king_zone_attacks_simp(get_lsb(&white_king), white_pieces, &board.mg, WHITE, board.get_occupancy());
+        let black_safety = self.score_king_zone_attacks_simp(get_lsb(&black_king), black_pieces, &board.mg, BLACK, board.get_occupancy());
+        let score = white_safety - black_safety;
         interp_phase(score, 0, pre_eval_result.phase)
     }
 

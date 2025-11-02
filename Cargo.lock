@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "barbel"
-version = "0.4.11"
+version = "0.4.12"
 dependencies = [
  "rand",
  "regex",

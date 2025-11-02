@@ -1,14 +1,12 @@
-use crate::{bitboard_helpers::{get_file, get_lsb, get_rank, pop_lsb, reverse}, constants::*, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, position::{board::Board, piece_set::PieceSet}};
+use crate::{bitboard_helpers::pop_lsb, constants::*, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, position::{board::{self, Board}, piece_set::PieceSet}};
 
 const K: usize = 16;
 
 #[derive(Clone)]
 pub struct PawnEvalHashEntry {
     pub score: i32,
-    /*
-    * each 3 bits correspond to the rank of a pawn, first 24 for white, next 24 for black, 
-    */
-    pub pawn_ranks: u64,
+    pub white_pawns: u64,
+    pub black_pawns: u64
 }
 
 //option here is relatively cheap since the table is already small
@@ -24,14 +22,22 @@ impl PawnEvalHashTable {
         PawnEvalHashTable { table: vec![None; size], mask: (size as u64) - 1 }
     }
 
-    pub fn store(&mut self, hash: u64, entry: PawnEvalHashEntry) {
+    pub fn store(&mut self, white_pawns: u64, black_pawns: u64, entry: PawnEvalHashEntry) {
+        let hash = hash_pawns(white_pawns, black_pawns);
         let idx = hash & self.mask;
         self.table[idx as usize] = Some(entry);
     }
 
-    pub fn probe(&self, hash: u64) -> Option<PawnEvalHashEntry> {
+    pub fn probe(&self, white_pawns: u64, black_pawns: u64) -> Option<PawnEvalHashEntry> {
+        let hash = hash_pawns(white_pawns, black_pawns);
         let idx = hash & self.mask;
-        self.table[idx as usize].clone()
+        let entry = &self.table[idx as usize];
+        match entry {
+            Some(entry) if entry.white_pawns == white_pawns && entry.black_pawns == black_pawns => {
+                Some(entry.clone())
+            }
+            _ => None
+        }
     }
 }
 
@@ -51,80 +57,102 @@ pub fn hash_pawns(white: u64, black: u64) -> u64 {
     z
 }
 
-fn compute_pawn_ranks(white_pawns: u64, black_pawns: u64) -> u64 {
-    let mut result = 0u64;
-    for (i, file) in FILES.iter().enumerate() {
-        result |= ((white_pawns & file << i).trailing_zeros() as u64 / 8) << (3 * i);
-        result |= ((black_pawns & file << i).trailing_zeros() as u64 / 8) << (24 + 3 * i);
+
+impl Evaluator {
+    //this has to be done FIRST
+    pub fn score_pawns(&mut self, board: &Board, pre_eval: &PreEvalResult) -> i32 {
+        let white_pieces = board.get_pieces(WHITE);
+        let black_pieces = board.get_pieces(BLACK);
+
+        let white_pawns = white_pieces.get_pawns();
+        let black_pawns= black_pieces.get_pawns();
+
+        if let Some(entry) = self.pawn_hash.probe(white_pawns, black_pawns) {
+            entry.score
+        } else {
+            let white_score = score_pawns_side(WHITE, white_pawns, black_pawns, pre_eval.phase);
+            let black_score = score_pawns_side(BLACK, black_pawns, white_pawns, pre_eval.phase);
+            let score = white_score - black_score;
+            let new_entry = PawnEvalHashEntry {score, white_pawns, black_pawns};
+            self.pawn_hash.store(white_pawns, black_pawns, new_entry);
+            score
+        }
+    }
+}
+
+fn score_pawns_side(color: usize, pawns: u64, enemy_pawns: u64, phase: i32) -> i32 {
+    let passed_pawn_score = score_passed_pawns(color, pawns, enemy_pawns, phase);
+    passed_pawn_score
+}
+
+fn score_passed_pawns(color: usize, mut pawns: u64, enemy_pawns: u64, phase: i32) -> i32 {
+    let mut score = 0;
+    while pawns != 0 {
+        let pawn = pop_lsb(&mut pawns);
+        let passed_rank = passed_rank(color, pawn, enemy_pawns);
+        score += interp_phase(PASSED_PAWN_SCORE_MG[color][passed_rank], PASSED_PAWN_SCORE_EG[color][passed_rank], phase);
+    }
+    score
+}
+
+#[inline]
+fn passed_rank(color: usize, pawn: usize, enemy_pawns: u64) -> usize {
+    if PAWN_FRONT[color][pawn] & enemy_pawns == 0 {
+        let rank = pawn / 8;
+        rank
+    } else {
+        0
+    }
+}
+
+// MadChess eval scores
+const PASSED_PAWN_SCORE_MG: [[i32; 8]; 2] = [[0, 34, 24, 15, 8, 3, 0, 0], [0, 0, 3, 8, 15, 24, 34, 0]];
+const PASSED_PAWN_SCORE_EG: [[i32; 8]; 2] = [[0, 118, 75, 42, 18, 4, 0, 0], [0, 0, 4, 18, 42, 75, 118, 0]];
+
+
+// bitboards representing files in front of a pawn on its file and adjacent files
+const PAWN_FRONT: [[u64; 64]; 2] = compute_pawn_front();
+
+const fn compute_pawn_front() -> [[u64; 64]; 2] {
+    let mut result = [[0u64; 64]; 2];
+    let mut sq = 0usize;
+    while sq < 64 {
+        let file = sq % 8;
+
+        let mut lookup = 0u64;
+        let mut ptr = sq + 8;
+        while ptr < 64 {
+            lookup |= 1 << ptr;
+            if file > 0 {
+                lookup |= 1 << (ptr - 1);
+            }
+            if file < 7 {
+                lookup |= 1 << (ptr + 1);
+            }
+            ptr += 8;
+        }
+        result[WHITE][sq] = lookup;
+
+        if sq > 8 {
+            let mut lookup = 0u64;
+            let mut ptr = sq - 8;
+            while ptr >= 8 {
+                lookup |= 1 << ptr;
+                if file > 0 {
+                    lookup |= 1 << (ptr - 1);
+                }
+                if file < 7 {
+                    lookup |= 1 << (ptr + 1);
+                }
+                ptr -= 8;
+            }
+            result[BLACK][sq] = lookup;
+        }
+
+        sq += 1;
     }
     result
 }
 
-impl Evaluator {
-    //this has to be done FIRST
-    pub fn score_pawns(&mut self, white_pieces: &PieceSet, black_pieces: &PieceSet) {
-        let white_pawns = white_pieces.get_pawns();
-        let black_pawns= black_pieces.get_pawns();
-
-        let pawn_hash = hash_pawns(white_pawns, black_pawns);
-        //TODO: THIS
-    }
-
-    fn score_pawn_shield(&mut self, king: u64, pawn_ranks: u64, color: usize) -> i32 {
-        let mut score = 0;
-        let kr = get_rank(king) as i32;
-        let kf = get_file(king) as i32;
-        if color == WHITE {
-            if kf > 0 {    
-                let pawn_rank = ((pawn_ranks >> (3 * (kf - 1))) & 0b111) as i32;
-                let idx = kr - pawn_rank;
-                if idx >= 0 {
-                    score += SIDE_PS_PENALTY[idx as usize];
-                }
-            }
-
-            let pawn_rank = ((pawn_ranks >> (3 * kf)) & 0b111) as i32;
-            let idx = kr - pawn_rank;
-            if idx >= 0 {
-                score += CENTER_PS_PENALTY[idx as usize];
-            }
-
-            if kf < 7 {
-                let pawn_rank = ((pawn_ranks >> (3 * (kf + 1))) & 0b111) as i32;
-                let idx = kr - pawn_rank;
-                if idx >= 0 {
-                    score += SIDE_PS_PENALTY[idx as usize];
-                }
-            }
-        } else {
-            if kf > 0 {    
-                let pawn_rank = ((pawn_ranks >> (3 * (kf + 23))) & 0b111) as i32;
-                let idx = pawn_rank - kr;
-                if idx >= 0 {
-                    score += SIDE_PS_PENALTY[idx as usize];
-                }
-            }
-
-            let pawn_rank = ((pawn_ranks >> (3 * (kf + 24))) & 0b111) as i32;
-            let idx = pawn_rank - kr;
-            if idx >= 0 {
-                score += CENTER_PS_PENALTY[idx as usize];
-            }
-
-            if kf < 7 {
-                let pawn_rank = ((pawn_ranks >> (3 * (kf + 25))) & 0b111) as i32;
-                let idx = pawn_rank - kr;
-                if idx >= 0 {
-                    score += SIDE_PS_PENALTY[idx as usize];
-                }
-            }
-        }
-        score
-    }
-}
-
 const WHITE_PAWN_RANKS: u64 = 0xffffff;
 const BLACK_PAWN_RANKS: u64 = 0x000000_ffffff;
-
-const SIDE_PS_PENALTY: [i32; 8] = [0, 0, -15, -30, -30, -30, -30, -30];
-const CENTER_PS_PENALTY: [i32; 8] = [0, 0, -25, -40, -40, -40, -40, -40];

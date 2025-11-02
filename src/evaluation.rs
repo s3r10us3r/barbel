@@ -26,7 +26,8 @@ impl Evaluator {
         let pre_eval_result = self.run_pre_eval(board);
         let pieces = evaluate_pieces(board, &pre_eval_result);
         let piece_squares = score_piece_squares(board, &pre_eval_result);
-        let score = pieces + piece_squares;
+        let pawn_score = self.score_pawns(board, &pre_eval_result);
+        let score = pieces + piece_squares + pawn_score;
         if board.us == WHITE {
             score
         } else {
