@@ -1,4 +1,4 @@
-use crate::{bitboard_helpers::get_lsb, constants::{BISHOP, BLACK, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}, moving::move_generation::MoveGenerator, position::board::Board};
+use crate::{bitboard_helpers::get_lsb, constants::{BISHOP, BLACK, FILEA, FILEH, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}, moving::move_generation::MoveGenerator, position::board::Board};
 
 impl MoveGenerator {
     pub fn attackers_to_exist(&self, board: &Board, k_sq: u64, occ: u64, color: usize) -> u64 {
@@ -41,6 +41,14 @@ impl MoveGenerator {
             self.get_pawn_attacks(sq, BLACK)
         } else {
             self.get_pawn_attacks(sq, WHITE)
+        }
+    }
+
+    pub fn pawn_attacks_all(&self, pawns: u64, color: usize) -> u64 {
+        if color == WHITE {
+            ((pawns & !FILEA) << 7) | ((pawns & !FILEH) << 9)
+        } else {
+            ((pawns & !FILEA) >> 9) | ((pawns & !FILEH) >> 7)
         }
     }
 }

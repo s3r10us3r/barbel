@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -62,7 +63,7 @@ impl Default for Searcher {
             nmp_hits: 0,
             stop: Arc::new(AtomicBool::new(false)),
             history: HistoryTable::new(),
-            killers: KillerTable::new()
+            killers: KillerTable::new(),
         }
     }
 }
@@ -165,16 +166,22 @@ impl Searcher {
         let depth_left = self.search_depth - depth;
         self.nodes_searched += 1;
         let hash = board.get_hash();
-
+        
         let mut hash_move = Move::null();
         if let Some(e) = self.ttable.probe(hash) {
             hash_move = e.best_move;
             self.ttable_hits += 1;
-            if e.depth_left >= depth_left {
+            if depth > 0 && e.depth_left >= depth_left {
                 match e.entry_type {
-                    TTEntryType::Exact => return e.score,
-                    TTEntryType::Lower if e.score >= beta => return e.score,
-                    TTEntryType::Upper if e.score <= alpha => return e.score,
+                    TTEntryType::Exact => {
+                        return e.score
+                    },
+                    TTEntryType::Lower if e.score >= beta => { 
+                        return e.score
+                    },
+                    TTEntryType::Upper if e.score <= alpha => {
+                        return e.score
+                    }
                     _ => {}
                 }
             }

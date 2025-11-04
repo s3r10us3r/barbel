@@ -49,6 +49,7 @@ impl Board {
             new_state.disable_all_castling_rights(self.us);
         } else if mv.is_double_pawn_move() {
             let file = get_file(target) + 1;
+            self.hasher.toggle_en_passant_file(file - 1);
             new_state.set_en_passant_file(file);
         } else if mv.is_en_passant() {
             let en_passant_field = if self.us == WHITE {
@@ -66,10 +67,6 @@ impl Board {
             new_state.disable_all_castling_rights(self.us);
         }
 
-        let new_ep = new_state.get_en_passant_file();
-        if new_ep != 0 {
-            self.hasher.toggle_en_passant_file(new_ep - 1);
-        }
         self.hasher.toggle_moving_side();
         self.hasher
             .toggle_castling_rights(new_state.get_castling_rights() as usize);
@@ -285,6 +282,17 @@ mod test {
         let fen_after = "1N2k3/8/8/8/8/8/8/4K3 b - - 0 1";
         let mv = construct_move("b7", "b8", 8);
         should_make_and_unmake(fen_before, fen_after, mv);
+    }
+
+    #[test]
+    fn should_different_zobrist_keys() {
+        let fen1 = "5r1k/p1B3pp/6q1/2p1Pp2/2Pr4/3n2P1/PP2QP2/R3R1K1 w - - 0 1";
+        let fen2 = "5r1k/p1B3pp/6q1/2p1Pp2/2Pr4/3n2P1/PP2QP2/R3R1K1 w - f6 0 1";
+        let board1 = parse_fen(fen1).unwrap();
+        let board2 = parse_fen(fen2).unwrap();
+        let hash1 = board1.get_hash();
+        let hash2 = board2.get_hash();
+        assert_ne!(hash1, hash2)
     }
 
     fn should_make_and_unmake(fen_before: &str, fen_after: &str, mv: Move) {
