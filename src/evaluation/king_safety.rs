@@ -1,5 +1,6 @@
 use crate::{bitboard_helpers::{get_lsb, pop_lsb}, constants::{BISHOP, BLACK, KNIGHT, QUEEN, ROOK, WHITE}, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, fen_parsing::parse_to_fen, moving::move_generation::MoveGenerator, position::{board::Board, piece_set::PieceSet}};
 
+/*
 impl Evaluator {
     pub fn evaluate_king_safety(&self, board: &Board, pre_eval_result: &PreEvalResult) -> i32 {
         let white_pieces = board.get_pieces(WHITE);
@@ -8,8 +9,8 @@ impl Evaluator {
         let white_king = white_pieces.get_king();
         let black_king = black_pieces.get_king();
         
-        let white_safety = self.score_king_zone_attacks_simp(get_lsb(&white_king), white_pieces, &board.mg, WHITE, board.get_occupancy());
-        let black_safety = self.score_king_zone_attacks_simp(get_lsb(&black_king), black_pieces, &board.mg, BLACK, board.get_occupancy());
+        let white_safety = self.score_king_zone_attacks_simp(get_lsb(&white_king), white_pieces, WHITE, board.get_occupancy());
+        let black_safety = self.score_king_zone_attacks_simp(get_lsb(&black_king), black_pieces, BLACK, board.get_occupancy());
         let score = white_safety - black_safety;
         interp_phase(score, 0, pre_eval_result.phase)
     }
@@ -43,7 +44,7 @@ impl Evaluator {
     }
 
 
-    fn score_king_zone_attacks_simp(&self, king_sq: usize, enemy_pieces: &PieceSet, mg: &MoveGenerator, color: usize, occ: u64) -> i32 {
+    fn score_king_zone_attacks_simp(&self, king_sq: usize, enemy_pieces: &PieceSet, color: usize, occ: u64) -> i32 {
         let king_zone = find_king_zone(king_sq, mg, color);
 
 
@@ -106,3 +107,4 @@ const PIECE_ATTACK_CONSTANTS: [u32; 6] = [0, 20, 20, 40, 80, 0];
 const ATTACK_WEIGHT: [u32; 20] = [0, 50, 75, 88, 94, 97, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100];
 
 
+*/

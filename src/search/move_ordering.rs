@@ -1,4 +1,4 @@
-use crate::{constants::PAWN, evaluation::piece_values::MIDGAME_PIECE_VALUES, moving::{move_list::MoveList, mv::Move}, position::board::Board, search::{history::HistoryTable, killers::{self, KillerTable}}};
+use crate::{bitboard_helpers::pop_lsb, constants::{PAWN, WHITE}, evaluation::piece_values::MIDGAME_PIECE_VALUES, moving::{move_generation::{generate_moves, is_legal}, move_list::MoveList, mv::Move}, position::board::Board, search::{history::HistoryTable, killers::{self, KillerTable}}};
 
 pub struct OrderedMovesIter {
     moves: Vec<ClassifiedMove>,
@@ -27,7 +27,7 @@ impl OrderedMovesIter {
 
     fn next_pv_node(&mut self, board: &Board, hist: &HistoryTable, killers: &KillerTable) -> Option<Move> {
         self.phase = MoveOrderingPhase::Generation;
-        if !self.pv_node.is_null() && board.is_legal(&self.pv_node) {
+        if !self.pv_node.is_null() && is_legal(&self.pv_node, board) {
             Some(self.pv_node)
         } else {
             self.next(board, hist, killers)
@@ -35,7 +35,7 @@ impl OrderedMovesIter {
     }
 
     fn generate_moves(&mut self, board: &Board, hist: &HistoryTable, killers: &KillerTable) -> Option<Move> {
-        let mvs = board.mg.generate_moves(board);
+        let mvs = generate_moves(board);
         let mut classified_moves: Vec<ClassifiedMove> = Vec::with_capacity(mvs.get_count());
         for mv in mvs.iter() {
             if *mv != self.pv_node {

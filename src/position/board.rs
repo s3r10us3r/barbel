@@ -1,4 +1,4 @@
-use crate::{constants::{BLACK, WHITE}, moving::move_generation::MoveGenerator};
+use crate::{constants::{BLACK, WHITE}, moving::move_generation::{attackers_to_exist, MoveGenerator}};
 use super::{board_state::BoardState, piece_set::PieceSet, zobrist_hashing::ZobristHasher};
 
 pub struct Board {
@@ -11,7 +11,6 @@ pub struct Board {
     hash_stack: Vec<u64>,
     checkers: u64,
     occ: u64,
-    pub mg: MoveGenerator
 }
 
 impl Board {
@@ -26,7 +25,6 @@ impl Board {
             hash_stack: vec![],
             checkers: 0,
             occ: 0,
-            mg: MoveGenerator::new()
         }
     }
 
@@ -104,7 +102,7 @@ impl Board {
     }
 
     fn compute_checkers(&mut self) {
-        self.checkers = self.mg.attackers_to_exist(
+        self.checkers = attackers_to_exist(
             self, 
             self.players[self.us].get_king(),
             self.get_occupancy(),

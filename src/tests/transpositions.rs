@@ -1,6 +1,6 @@
 use std::{collections::HashSet, hash::Hash, ptr::hash};
 
-use crate::position::board::Board;
+use crate::{moving::move_generation::generate_moves, position::board::Board};
 
 // returns (false_positives, false_negatives)
 pub fn test_transpositions(board: &mut Board, target_depth: i32) -> (u64, u64) {
@@ -29,7 +29,7 @@ fn tt_test_helper(board: &mut Board, false_positives: &mut u64, false_negatives:
         return;
     }
 
-    let moves = board.mg.generate_moves(board);
+    let moves = generate_moves(board);
     for mv in moves.iter() {
         board.make_move(mv);
         tt_test_helper(board, false_positives, false_negatives, fens, hashes, depth_left - 1);

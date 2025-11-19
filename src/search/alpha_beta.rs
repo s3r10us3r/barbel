@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::f32::consts::PI;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -6,6 +6,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use crate::evaluation::Evaluator;
+use crate::moving::move_generation::generate_moves;
 use crate::position::piece_set::PieceSet;
 use crate::search::history::HistoryTable;
 use crate::search::killers::KillerTable;
@@ -100,7 +101,7 @@ impl Searcher {
         self.stop.store(false, Ordering::Relaxed);
         let time = time as u128;
         let start = Instant::now();
-        let fallback_mv = *board.mg.generate_moves(board).get_move(0);
+        let fallback_mv = *generate_moves(board).get_move(0);
 
         thread::scope(|s| {
             let stop = Arc::clone(&self.stop);
@@ -121,7 +122,7 @@ impl Searcher {
                     depth += 1;
                 }
                 if best.is_null() {
-                    let moves = board.mg.generate_moves(board);
+                    let moves = generate_moves(board);
                     best = *moves.get_move(0);
                 }
                 self.stop.store(true, Ordering::Relaxed);
@@ -203,7 +204,16 @@ impl Searcher {
         let mut best_score = i32::MIN;
         let mut best_move = Move::null();
 
+        let mut mv_num = 0;
         while let Some(mv) = ordered_moves.next(board, &self.history, &self.killers) {
+            let lmr = self.compute_lmr(board, &mv, mv_num, depth, depth_left);
+            if lmr > 0 {
+                board.make_move(&mv);
+                let lmr_score = -self.nega_max(board, depth + 1 + lmr, -beta, -alpha);
+                board.unmake_move(&mv);
+                if lmr_score < alpha { continue; }
+            }
+
             board.make_move(&mv);
             let score = -self.nega_max(board, depth + 1, -beta, -alpha);
             board.unmake_move(&mv);
@@ -219,6 +229,7 @@ impl Searcher {
                 self.killers.update(depth, mv);
             }
             if alpha >= beta { break } 
+            mv_num += 1;
         }
 
         //no moves
@@ -254,7 +265,7 @@ impl Searcher {
             return alpha;
         }
         self.nodes_searched += 1;
-        let moves = board.mg.generate_moves(board);
+        let moves = generate_moves(board);
         if moves.get_count() == 0 {
             if board.is_check() {
                 return -MATE+depth;
@@ -290,5 +301,17 @@ impl Searcher {
 
     pub fn get_nodes_searched(&self) -> i32 {
         self.nodes_searched
+    }
+
+    fn compute_lmr(&self, board: &Board, mv: &Move, move_num: i32, depth: i32, depth_left: i32) -> i32 {
+        if board.is_check() || self.killers.is_killer(depth, mv) || mv.is_capture() || mv.is_promotion() || depth_left <= 3 || move_num < 10 {
+            0
+        } else {
+            let depth_left_f = depth_left as f32;
+            let move_num_f = move_num as f32;
+            let red = 0.99 + depth_left_f.ln() * move_num_f.ln() / PI;
+            let red_i = red as i32;
+            red_i.min(depth_left)
+        }
     }
 }

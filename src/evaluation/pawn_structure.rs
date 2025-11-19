@@ -1,4 +1,4 @@
-use crate::{bitboard_helpers::{flip_color, pop_lsb}, constants::*, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, moving::move_generation::MoveGenerator, position::{board::{self, Board}, piece_set::PieceSet}};
+use crate::{bitboard_helpers::{flip_color, pop_lsb}, constants::*, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, moving::move_generation::{pawn_attacks_all, MoveGenerator}, position::{board::{self, Board}, piece_set::PieceSet}};
 
 const K: usize = 16;
 
@@ -70,8 +70,8 @@ impl Evaluator {
         if let Some(entry) = self.pawn_hash.probe(white_pawns, black_pawns) {
             entry.score
         } else {
-            let white_score = score_pawns_side(WHITE, white_pawns, black_pawns, pre_eval.phase, &board.mg);
-            let black_score = score_pawns_side(BLACK, black_pawns, white_pawns, pre_eval.phase, &board.mg);
+            let white_score = score_pawns_side(WHITE, white_pawns, black_pawns, pre_eval.phase);
+            let black_score = score_pawns_side(BLACK, black_pawns, white_pawns, pre_eval.phase);
             let score = white_score - black_score;
             let new_entry = PawnEvalHashEntry {score, white_pawns, black_pawns};
             self.pawn_hash.store(white_pawns, black_pawns, new_entry);
@@ -80,11 +80,11 @@ impl Evaluator {
     }
 }
 
-fn score_pawns_side(color: usize, pawns: u64, enemy_pawns: u64, phase: i32, mg: &MoveGenerator) -> i32 {
+fn score_pawns_side(color: usize, pawns: u64, enemy_pawns: u64, phase: i32) -> i32 {
     let passed_pawn_score = score_passed_pawns(color, pawns, enemy_pawns, phase);
     let isolated_pawns_score = score_isolated_pawns(pawns, phase);
     let doubled_pawns_score = score_doubled_pawns(pawns, phase);
-    let backwards_pawn_score = score_backwards_pawns(color, mg, pawns, enemy_pawns);
+    let backwards_pawn_score = score_backwards_pawns(color,pawns, enemy_pawns);
     let connected_pawns_score = score_connected_pawns(pawns, color);
     passed_pawn_score + isolated_pawns_score + doubled_pawns_score + backwards_pawn_score + connected_pawns_score
 }
@@ -145,21 +145,21 @@ fn count_isolated_pawns(pawns: u64) -> i32 {
     cnt
 }
 
-fn score_backwards_pawns(color: usize, mg: &MoveGenerator, pawns: u64, enemy_pawns: u64) -> i32 {
-    let backwards_pawns_cnt = count_backwards_pawns(color, mg, pawns, enemy_pawns);
+fn score_backwards_pawns(color: usize, pawns: u64, enemy_pawns: u64) -> i32 {
+    let backwards_pawns_cnt = count_backwards_pawns(color, pawns, enemy_pawns);
     backwards_pawns_cnt * BACKWARDS_PAWN_PENALTY
 }
 
-fn count_backwards_pawns(color: usize, mg: &MoveGenerator, pawns: u64, enemy_pawns: u64) -> i32 {
+fn count_backwards_pawns(color: usize, pawns: u64, enemy_pawns: u64) -> i32 {
     if color == WHITE {
-        let pawn_attacks = mg.pawn_attacks_all(pawns, WHITE);
-        let enemy_pawn_attacks = mg.pawn_attacks_all(enemy_pawns, BLACK);
+        let pawn_attacks = pawn_attacks_all(pawns, WHITE);
+        let enemy_pawn_attacks = pawn_attacks_all(enemy_pawns, BLACK);
         let stop_squares = pawns << 8;
         let res = stop_squares & enemy_pawn_attacks & !pawn_attacks;
         res.count_ones() as i32
     } else {
-        let pawn_attacks = mg.pawn_attacks_all(pawns, BLACK);
-        let enemy_pawn_attacks = mg.pawn_attacks_all(enemy_pawns, WHITE);
+        let pawn_attacks = pawn_attacks_all(pawns, BLACK);
+        let enemy_pawn_attacks = pawn_attacks_all(enemy_pawns, WHITE);
         let stop_squares = pawns >> 8;
         let res = stop_squares & enemy_pawn_attacks & !pawn_attacks;
         res.count_ones() as i32

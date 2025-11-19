@@ -4,6 +4,13 @@ use crate::moving::magics::*;
 use crate::moving::move_list::MoveList;
 use crate::position::board::Board;
 use crate::moving::mv::Move;
+use std::sync::OnceLock;
+
+static MG: OnceLock<MoveGenerator> = OnceLock::new();
+
+fn get_mg() -> &'static MoveGenerator {
+    MG.get_or_init(|| MoveGenerator::new())
+}
 
 pub struct MoveGenerator {
     rook_lookup: Vec<Vec<u64>>,
@@ -12,6 +19,23 @@ pub struct MoveGenerator {
 
 impl Default for MoveGenerator {
     fn default() -> Self { Self::new() }
+}
+
+
+pub fn generate_moves(board: &Board) -> MoveList {
+    get_mg().generate_moves(board)
+}
+
+pub fn attackers_to_exist(board: &Board, k_sq: u64, occ: u64, color: usize) -> u64 {
+    get_mg().attackers_to_exist(board, k_sq, occ, color)
+}
+
+pub fn is_legal(mv: &Move, board: &Board) -> bool {
+    get_mg().is_legal(mv, board)
+}
+
+pub fn pawn_attacks_all(pawns: u64, color: usize) -> u64 {
+    get_mg().pawn_attacks_all(pawns, color)
 }
 
 impl MoveGenerator {
@@ -61,7 +85,7 @@ impl MoveGenerator {
         self.gen_king_moves(move_list, us.get_king(), enemy.get_all(), occ);
         for i in (0..move_list.get_count()).rev() {
             let mv = &move_list[i];
-            if !board.is_king_move_legal(mv) {
+            if !self.is_king_move_legal(mv, board) {
                 move_list.remove(i);
             }
         }

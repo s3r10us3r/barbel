@@ -143,8 +143,8 @@ impl PieceSet {
         self.pieces[PAWN]
     }
 
-    pub fn set_pawns(&self) -> u64 {
-        self.pieces[PAWN]
+    pub fn set_pawns(&mut self, pawns: u64) {
+        self.pieces[PAWN] = pawns;
     }
 
     #[inline]
@@ -195,5 +195,66 @@ impl PieceSet {
 
     pub fn get_color(&self) -> usize {
         self.color
+    }
+
+    pub fn iter(&self) -> PieceSetIter {
+        PieceSetIter::new(&self.pieces)
+    }
+
+    pub fn iter_w_vals(&self) -> PieceSetValuesIter {
+        PieceSetValuesIter::new(&self.pieces)
+    }
+
+}
+
+pub struct PieceSetIter<'a> {
+    pieces: &'a [u64; 6],
+    idx: usize,
+}
+
+impl<'a> PieceSetIter<'a> {
+    fn new(pieces: &'a [u64; 6]) -> Self {
+        PieceSetIter {pieces, idx: 0}
+    } 
+}
+
+impl<'a> Iterator for PieceSetIter<'a> {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<u64> {
+        if self.idx >= 6 {
+            None
+        } else {
+            let res = self.pieces[self.idx];
+            self.idx += 1;
+            Some(res)
+        }
+    }
+}
+
+pub struct PieceSetValuesIter<'a> {
+    pieces: &'a [u64; 6],
+    values: [usize; 6],
+    idx: usize
+}
+
+impl<'a> PieceSetValuesIter<'a> {
+    fn new(pieces: &'a [u64; 6]) -> Self {
+        PieceSetValuesIter { pieces, values: [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING], idx: 0 }
+    }
+}
+
+impl<'a> Iterator for PieceSetValuesIter<'a> {
+    type Item = (u64, usize);
+
+    fn next(&mut self) -> Option<(u64, usize)> {
+        if self.idx >= 6 {
+            None
+        } else {
+            let pieces = self.pieces[self.idx];
+            let value = self.values[self.idx];
+            self.idx += 1;
+            Some((pieces, value))
+        }
     }
 }
