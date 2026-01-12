@@ -164,9 +164,11 @@ impl Engine {
                         && !stop2.load(std::sync::atomic::Ordering::Relaxed) 
                         {
                             searcher.make_search(&mut board, depth);
-                            best_mv = searcher.get_best();
-                            depth += 1;
-                            nodes_searched += searcher.get_nodes_searched();
+                            if !stop2.load(Ordering::Relaxed) {
+                                best_mv = searcher.get_best();
+                                depth += 1;
+                                nodes_searched += searcher.get_nodes_searched();
+                            }
                         }
                         (searcher, best_mv)
                     });

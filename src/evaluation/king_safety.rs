@@ -16,8 +16,8 @@ impl Evaluator {
         let white_safety = self.score_king_zone_attacks_simp(get_lsb(&white_king), black_pieces, WHITE, board.get_occupancy(), mg);
         let black_safety = self.score_king_zone_attacks_simp(get_lsb(&black_king), white_pieces, BLACK, board.get_occupancy(), mg);
 
-        let white_shield = self.calculate_shield(white_king, 8, white_pieces.get_pawns());
-        let black_shield = self.calculate_shield(black_king, -8, black_pieces.get_pawns());
+        let white_shield = self.calculate_shield(board, WHITE, white_king, 8, white_pieces.get_pawns());
+        let black_shield = self.calculate_shield(board, BLACK, black_king, -8, black_pieces.get_pawns());
 
         let white_score = interp_by_my_material(white_safety + white_shield, black_pieces);
         let black_score = interp_by_my_material(black_safety + black_shield, white_pieces);
@@ -25,11 +25,13 @@ impl Evaluator {
         white_score - black_score
     }
 
-    fn calculate_shield(&self, king: u64, dir: i32, pawns: u64) -> i32 {
+    fn calculate_shield(&self, board: &Board, color: usize, king: u64, dir: i32, pawns: u64) -> i32 {
         let king_sq = get_lsb(&king) as i32;
         let file = king_sq % 8;
         
-        if file == 3 || file == 4 {
+        let state = board.get_state();
+        let can_castle = state.can_castle_kingside(color) || state.can_castle_queenside(color);
+        if (file == 3 || file == 4) && can_castle {
             return 0;
         }
 
