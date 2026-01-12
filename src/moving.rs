@@ -1,6 +1,5 @@
 mod legality;
 mod magics;
-mod pawn_move_gen;
 pub mod null_move;
 pub mod move_generation;
 pub mod move_making;

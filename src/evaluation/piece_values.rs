@@ -8,7 +8,7 @@ pub struct PieceValues {
     pub values: [i32; 6],
 }
 
-//NONE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN
+//PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
 pub const MIDGAME_PIECE_VALUES: PieceValues = PieceValues{values: [100,300,350,455,900,0]};
 const ENDGAME_PIECE_VALUES: PieceValues = PieceValues{values: [150,300,350,550,1000,0]};
 

@@ -1,10 +1,17 @@
-use crate::{bitboard_helpers::{flip_color, pop_lsb}, constants::*, evaluation::{phase::interp_phase, preliminary::PreEvalResult, Evaluator}, moving::move_generation::{pawn_attacks_all, MoveGenerator}, position::{board::{self, Board}, piece_set::PieceSet}};
+use crate::bitboard_helpers:: pop_lsb;
+use crate::constants::*;
+use crate::evaluation::phase::interp_phase;
+use crate::evaluation::preliminary::PreEvalResult;
+use crate::evaluation::Evaluator;
+use crate::moving::move_generation::pawn_attacks_all;
+use crate::position::board::Board;
 
 const K: usize = 16;
 
 #[derive(Clone)]
 pub struct PawnEvalHashEntry {
-    pub score: i32,
+    pub mg_score: i32,
+    pub eg_score: i32,
     pub white_pawns: u64,
     pub black_pawns: u64
 }
@@ -68,35 +75,40 @@ impl Evaluator {
         let black_pawns= black_pieces.get_pawns();
 
         if let Some(entry) = self.pawn_hash.probe(white_pawns, black_pawns) {
-            entry.score
+            interp_phase(entry.mg_score, entry.eg_score, pre_eval.phase)
         } else {
-            let white_score = score_pawns_side(WHITE, white_pawns, black_pawns, pre_eval.phase);
-            let black_score = score_pawns_side(BLACK, black_pawns, white_pawns, pre_eval.phase);
-            let score = white_score - black_score;
-            let new_entry = PawnEvalHashEntry {score, white_pawns, black_pawns};
+            let (white_score_mg, white_score_eg) = score_pawns_side(WHITE, white_pawns, black_pawns);
+            let (black_score_mg, black_score_eg) = score_pawns_side(BLACK, black_pawns, white_pawns);
+            let mg_score = white_score_mg - black_score_mg;
+            let eg_score = white_score_eg - black_score_eg;
+            let new_entry = PawnEvalHashEntry {mg_score, eg_score, white_pawns, black_pawns};
             self.pawn_hash.store(white_pawns, black_pawns, new_entry);
-            score
+            interp_phase(mg_score, eg_score, pre_eval.phase)
         }
     }
 }
 
-fn score_pawns_side(color: usize, pawns: u64, enemy_pawns: u64, phase: i32) -> i32 {
-    let passed_pawn_score = score_passed_pawns(color, pawns, enemy_pawns, phase);
-    let isolated_pawns_score = score_isolated_pawns(pawns, phase);
-    let doubled_pawns_score = score_doubled_pawns(pawns, phase);
+fn score_pawns_side(color: usize, pawns: u64, enemy_pawns: u64) -> (i32, i32) {
+    let (passed_pawn_score_mg, passed_pawn_score_eg) = score_passed_pawns(color, pawns, enemy_pawns);
+    let (isolated_pawns_score_mg, isolated_pawns_score_eg) = score_isolated_pawns(pawns);
+    let (doubled_pawns_score_mg, doubled_pawns_score_eg) = score_doubled_pawns(pawns);
     let backwards_pawn_score = score_backwards_pawns(color,pawns, enemy_pawns);
     let connected_pawns_score = score_connected_pawns(pawns, color);
-    passed_pawn_score + isolated_pawns_score + doubled_pawns_score + backwards_pawn_score + connected_pawns_score
+    let mg_score = passed_pawn_score_mg + isolated_pawns_score_mg + doubled_pawns_score_mg + backwards_pawn_score + connected_pawns_score;
+    let eg_score = passed_pawn_score_eg + isolated_pawns_score_eg + doubled_pawns_score_eg + backwards_pawn_score + connected_pawns_score;
+    (mg_score, eg_score)
 }
 
-fn score_passed_pawns(color: usize, mut pawns: u64, enemy_pawns: u64, phase: i32) -> i32 {
-    let mut score = 0;
+fn score_passed_pawns(color: usize, mut pawns: u64, enemy_pawns: u64) -> (i32, i32) {
+    let mut midgame_score = 0;
+    let mut endgame_score = 0;
     while pawns != 0 {
         let pawn = pop_lsb(&mut pawns);
         let passed_rank = passed_rank(color, pawn, enemy_pawns);
-        score += interp_phase(PASSED_PAWN_SCORE_MG[color][passed_rank], PASSED_PAWN_SCORE_EG[color][passed_rank], phase);
+        midgame_score += PASSED_PAWN_SCORE_MG[color][passed_rank];
+        endgame_score += PASSED_PAWN_SCORE_EG[color][passed_rank];
     }
-    score
+    (midgame_score, endgame_score)
 }
 
 #[inline]
@@ -108,11 +120,11 @@ fn passed_rank(color: usize, pawn: usize, enemy_pawns: u64) -> usize {
     }
 }
 
-fn score_doubled_pawns(pawns: u64, phase: i32) -> i32 {
+fn score_doubled_pawns(pawns: u64) -> (i32, i32) {
     let cnt = count_doubled_pawns(pawns) as i32;
     let mg_score = DOUBLED_PAWN_PENALTY_MG * cnt;
     let eg_score = DOUBLED_PAWN_PENALTY_EG * cnt;
-    interp_phase(mg_score, eg_score, phase)
+    (mg_score, eg_score)
 }
 
 #[inline]
@@ -126,11 +138,11 @@ fn count_doubled_pawns(pawns: u64) -> u32 {
     cnt
 }
 
-fn score_isolated_pawns(pawns: u64, phase: i32) -> i32 {
+fn score_isolated_pawns(pawns: u64) -> (i32, i32) {
     let cnt = count_isolated_pawns(pawns);
     let mg_score = cnt * ISOLATED_PAWN_PENALTY_MG;
     let eg_score = cnt * ISOLATED_PAWN_PENALTY_EG;
-    interp_phase(mg_score, eg_score, phase)
+    (mg_score, eg_score)
 }
 
 fn count_isolated_pawns(pawns: u64) -> i32 {
@@ -152,17 +164,33 @@ fn score_backwards_pawns(color: usize, pawns: u64, enemy_pawns: u64) -> i32 {
 
 fn count_backwards_pawns(color: usize, pawns: u64, enemy_pawns: u64) -> i32 {
     if color == WHITE {
-        let pawn_attacks = pawn_attacks_all(pawns, WHITE);
+        let mut pop_pawns = pawns;
         let enemy_pawn_attacks = pawn_attacks_all(enemy_pawns, BLACK);
-        let stop_squares = pawns << 8;
-        let res = stop_squares & enemy_pawn_attacks & !pawn_attacks;
-        res.count_ones() as i32
+        let mut res = 0;
+        while pop_pawns != 0 {
+            let pawn = pop_lsb(&mut pop_pawns);
+            let pawn_bb = 1 << pawn;
+            let behind = PAWN_FRONT[BLACK][pawn];
+            let stop_square = pawn_bb << 8;
+            if !is_in_phalanx(pawn_bb, pawns) && pawns & behind == 0 && enemy_pawn_attacks & stop_square != 0 {
+                res += 1;
+            }
+        }
+        res
     } else {
-        let pawn_attacks = pawn_attacks_all(pawns, BLACK);
+        let mut pop_pawns = pawns;
         let enemy_pawn_attacks = pawn_attacks_all(enemy_pawns, WHITE);
-        let stop_squares = pawns >> 8;
-        let res = stop_squares & enemy_pawn_attacks & !pawn_attacks;
-        res.count_ones() as i32
+        let mut res = 0;
+        while pop_pawns != 0 {
+            let pawn = pop_lsb(&mut pop_pawns);
+            let pawn_bb = 1 << pawn;
+            let behind = PAWN_FRONT[WHITE][pawn];
+            let stop_square = pawn_bb >> 8;
+            if !is_in_phalanx(pawn_bb, pawns) && pawns & behind == 0 && enemy_pawn_attacks & stop_square != 0 {
+                res += 1;
+            }
+        }
+        res
     }
 }
 
@@ -184,11 +212,11 @@ fn is_isolated(pawn: usize, pawns: u64) -> bool {
 fn score_connected_pawns(pawns: u64, color: usize) -> i32 {
     let mut score = 0;
     let mut pawns_pop = pawns;
-    while pawns_pop != pawns {
+    while pawns_pop != 0 {
         let pawn = pop_lsb(&mut pawns_pop);
         let pawn_bb = 1u64 << pawn;
         if is_in_phalanx(pawn_bb, pawns) || is_in_chain(pawn_bb, pawns) {
-            score += PAWN_CHAIN_SCORE[color][pawn];
+            score += PAWN_CHAIN_SCORE[color][pawn / 8];
         }
     }
     score
@@ -210,9 +238,16 @@ fn is_in_chain(pawn: u64, pawns: u64) -> bool {
     (relevant_squares & pawns) != 0
 }
 
-// MadChess eval scores
-const PASSED_PAWN_SCORE_MG: [[i32; 8]; 2] = [[0, 34, 24, 15, 8, 3, 0, 0], [0, 0, 3, 8, 15, 24, 34, 0]];
-const PASSED_PAWN_SCORE_EG: [[i32; 8]; 2] = [[0, 118, 75, 42, 18, 4, 0, 0], [0, 0, 4, 18, 42, 75, 118, 0]];
+const PASSED_PAWN_SCORE_MG: [[i32; 8]; 2] = [
+    [0, 100, 60, 35, 20, 10, 5, 0], 
+    [0, 5, 10, 20, 35, 60, 100, 0] 
+];
+
+const PASSED_PAWN_SCORE_EG: [[i32; 8]; 2] = [
+    [0, 260, 140, 85, 50, 20, 10, 0],
+    [0, 10, 20, 50, 85, 140, 260, 0]
+];
+
 
 const ISOLATED_PAWN_PENALTY_MG: i32 = -20;
 const ISOLATED_PAWN_PENALTY_EG: i32 = -50;
@@ -220,15 +255,15 @@ const ISOLATED_PAWN_PENALTY_EG: i32 = -50;
 // these values are from https://www.scribd.com/document/10151669/All-About-Doubled-Pawns
 // The article itself mentions that hese are undesirable by 1/8th of a pawn so i just doubled the
 // penalty for the endgame :)
-const DOUBLED_PAWN_PENALTY_MG: i32 = -15;
-const DOUBLED_PAWN_PENALTY_EG: i32 = -30;
+const DOUBLED_PAWN_PENALTY_MG: i32 = -12;
+const DOUBLED_PAWN_PENALTY_EG: i32 = -24;
 
 //stockfish eval scores
 const PAWN_CHAIN_SCORE: [[i32; 8]; 2] = [[0, 70, 25, 15, 10, 5, 0, 0], [0, 0, 5, 10, 15, 25, 70, 0]];
 
 const BACKWARDS_PAWN_PENALTY: i32 = -20;
 
-// bitboards representing files in front of a pawn on its file and adjacent files
+// bitboards representing squares in front of a pawn on its file and adjacent files
 const PAWN_FRONT: [[u64; 64]; 2] = compute_pawn_front();
 
 const fn compute_pawn_front() -> [[u64; 64]; 2] {

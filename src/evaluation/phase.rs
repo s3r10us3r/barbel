@@ -1,14 +1,7 @@
 use crate::position::{board::Board, piece_set::PieceSet};
 
 pub fn interp_phase(mg_val: i32, eg_val: i32, phase: i32) -> i32 {
-    if phase == 0 {
-        eg_val
-    } else if phase > INIT_PHASE_VALUE as i32 {
-        mg_val
-    }
-    else {
-        (phase * mg_val + (INIT_PHASE_VALUE as i32 - phase) * eg_val) / INIT_PHASE_VALUE as i32
-    }
+    (phase * mg_val + (INIT_PHASE_VALUE as i32 - phase) * eg_val) / INIT_PHASE_VALUE as i32
 }
 
 pub fn get_phase_val(board: &Board) -> i32 {
@@ -25,6 +18,7 @@ fn count_pieceset_game_phase(ps: &PieceSet) -> u32 {
     sum += ps.get_queens().count_ones() * QUEEN_PHASE_VALUE;
     sum
 }
+
 
 const PAWN_PHASE_VALUE: u32 = 0;
 const KNIGHT_PHASE_VALUE: u32 = 1;

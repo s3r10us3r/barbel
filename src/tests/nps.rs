@@ -1,4 +1,3 @@
-
 use std::time::Instant;
 
 use crate::{search::alpha_beta::Searcher, tests::epd::Epd};
@@ -8,7 +7,7 @@ pub struct NpsResult {
     pub nodes: u64
 }
 
-pub fn make_nps(positions: &str, search_depth: i32) -> NpsResult {
+pub fn make_nps(positions: &str) -> NpsResult {
     let mut nodes = 0u64;
     let mut time = 0u128; //in ms
     for position in positions.lines() {

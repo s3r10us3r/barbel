@@ -1,4 +1,12 @@
-use crate::{bitboard_helpers::get_lsb, constants::{BISHOP, BLACK, FILEA, FILEH, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE}, moving::move_generation::MoveGenerator, position::board::Board};
+use crate::bitboard_helpers::get_lsb;
+
+use crate::constants::{
+    BISHOP, BLACK, FILEA, FILEH, KING, 
+    KNIGHT, PAWN, QUEEN, ROOK, WHITE
+};
+
+use crate::moving::move_generation::MoveGenerator;
+use crate::position::board::Board;
 
 impl MoveGenerator {
     pub fn attackers_to_exist(&self, board: &Board, k_sq: u64, occ: u64, color: usize) -> u64 {

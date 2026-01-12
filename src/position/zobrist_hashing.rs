@@ -2,6 +2,7 @@ use crate::constants::*;
 
 use super::board::Board;
 
+#[derive(Clone)]
 pub struct ZobristHasher {
     square_piece: [u64; 768],   //64 * 6 * 2
     castling_rights: [u64; 16], //for each combination of possible castling rights,

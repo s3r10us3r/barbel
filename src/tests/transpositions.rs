@@ -1,5 +1,4 @@
-use std::{collections::HashSet, hash::Hash, ptr::hash};
-
+use std::collections::HashSet;
 use crate::{moving::move_generation::generate_moves, position::board::Board};
 
 // returns (false_positives, false_negatives)

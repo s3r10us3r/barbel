@@ -1,4 +1,9 @@
-use crate::{bitboard_helpers::*, constants::WHITE, moving::{move_generation::MoveGenerator, move_list::MoveList, mv::Move}, position::board::{self, Board}};
+use crate::bitboard_helpers::*; 
+use crate::constants::WHITE;
+use crate::moving::move_generation::MoveGenerator;
+use crate::moving::move_list::MoveList;
+use crate::moving::mv::Move;
+use crate::position::board::Board;
 
 impl MoveGenerator {
     pub fn filter_illegal_moves_when_check(&self, move_list: &mut MoveList, board: &Board, checker: u64) {

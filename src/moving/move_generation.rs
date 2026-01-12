@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 static MG: OnceLock<MoveGenerator> = OnceLock::new();
 
-fn get_mg() -> &'static MoveGenerator {
+pub fn get_mg() -> &'static MoveGenerator {
     MG.get_or_init(|| MoveGenerator::new())
 }
 

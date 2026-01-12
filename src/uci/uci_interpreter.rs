@@ -1,23 +1,16 @@
 use regex::Regex;
 
 use super::engine::Engine;
-use crate::{tests::{nps::make_nps, test_suites::NOLOT, transpositions::test_transpositions, wac::wac_test}, uci::perft::make_perft};
-use core::panic::PanicInfo;
+use crate::{tests::{itflat::make_comp_tests, nps::make_nps, test_suites::NOLOT, transpositions::test_transpositions, wac::wac_test}, uci::perft::make_perft};
 use std::{
-    env, fs, io::{self, Write}, process::exit
+    io::{self, Write}, process::exit
 };
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-enum UciControllerState {
-    INIT,
-    IDLE,
-    THINKING,
-}
 
 pub struct UciController {
     engine: Engine,
-    state: UciControllerState,
     parsed_command: Option<String>
 }
 
@@ -31,7 +24,7 @@ impl UciController {
     pub fn new() -> Self {
         let mut engine = Engine::new();
         let _ = engine.set_pos(START_POS);
-        UciController { engine, state: UciControllerState::INIT, parsed_command: None }
+        UciController { engine, parsed_command: None }
     }
 
     pub fn run(&mut self) {
@@ -63,15 +56,15 @@ impl UciController {
                 "go" => self.go(),
                 "position" => self.position(),
                 "isready" => self.is_ready(),
-                "stop" => unimplemented!(),
+                "stop" => self.stop(),
                 "help" => self.help(),
                 "uci" => self.uci(),
                 "quit" => self.quit(),
                 "ucinewgame" => self.ucinewgame(),
-                //TODO: Move this to engine so it can be later threaded
                 "wac" => wac_test(),
                 "nps" => nps_test(),
                 "tt_test"=> self.tt_test(),
+                "iter_test" => self.iter_test(),
                 _ => self.invalid_command(&t),
             }
         }
@@ -94,6 +87,10 @@ impl UciController {
         }
     }
 
+    fn iter_test(&mut self) {
+        make_comp_tests();
+    }
+
     fn go(&mut self) {
         let token = self.pop_token();
         match token {
@@ -105,14 +102,18 @@ impl UciController {
                         self.push_token_to_front(t);
                         self.go_time();
                     }
-                    "movetime" => unimplemented!("Not implemented yet!"),
-                    _ => unimplemented!()
+                    "movetime" => self.go_movetime(),
+                    _ => panic!()
                 }
             }
             None => {
-                panic!("Plain move is not implemented yet, expect it in future")
+                self.go_infinite();
             }
         }
+    }
+
+    fn go_infinite(&mut self) {
+        self.engine.search_infinite();
     }
 
     fn go_perft(&mut self) {
@@ -123,7 +124,7 @@ impl UciController {
                 if let Ok(depth) = parse_result {
                     let board = self.engine.get_board_mut();
                     let result = make_perft(depth, board);
-                    println!("\nNodes searched: {}\n\n", result.result);
+                    println!("\nNodes searched: {}, Time: {}\n\n", result.result, result.time);
                 } else {
                     println!("Invalid argument!\n");
                 }
@@ -154,6 +155,16 @@ impl UciController {
             }
         }
     }
+
+    fn go_movetime(&mut self) {
+        if let Some(num) = self.pop_token() {
+            let time_res = num.parse();
+            if let Ok(time) = time_res {
+                self.engine.search_movetime(time);
+            }
+        }
+    }
+
 
     fn go_time(&mut self) {
         let mut wtime: u64 = 0;
@@ -271,7 +282,6 @@ impl UciController {
     }
 
     fn reset(&mut self) {
-        self.state = UciControllerState::IDLE;
         self.parsed_command = None;
     }
 
@@ -310,20 +320,6 @@ impl UciController {
         }
     }
 
-    //return None if the number of arguments is less than specified
-    fn pop_tokens(&mut self, n: i32) -> Option<Vec<String>> {
-        let mut tokens = Vec::new();
-        for _ in 0..n {
-            let token = self.pop_token();
-            if let Some(t) = token {
-                tokens.push(t);
-            } else {
-                return None;
-            }
-        };
-        Some(tokens)
-    }
-
     fn ucinewgame(&mut self) {
         self.engine = Engine::new();
         _ = self.engine.set_pos(START_POS);
@@ -337,12 +333,14 @@ impl UciController {
         println!("uciok");
     }
 
-    fn is_ready(&self) {
-        println!("readyok");
+    fn is_ready(&mut self) {
+        if !self.engine.is_running() {
+            println!("readyok");
+        }
     }
 
-    fn stop(&self) {
-        unimplemented!();
+    fn stop(&mut self) {
+        self.engine.stop();
     }
 
     fn help(&self) {
@@ -361,7 +359,7 @@ fn merge_spaces(s: String) -> String {
 }
 
 fn nps_test() {
-    let nps_result = make_nps(NOLOT, 5);
+    let nps_result = make_nps(NOLOT);
     let nps = nps_result.nodes as f64 / (nps_result.time as f64 / 1000.);
     println!("\nNodes searched: {}\nTime measured: {:.2}s\nNodes per second: {:.2}", nps_result.nodes, nps_result.time as f64 / 1000., nps);
 }

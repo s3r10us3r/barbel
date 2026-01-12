@@ -1,6 +1,7 @@
-use crate::{constants::{BLACK, WHITE}, moving::move_generation::{attackers_to_exist, MoveGenerator}};
+use crate::{constants::{BLACK, WHITE}, moving::move_generation::{attackers_to_exist}};
 use super::{board_state::BoardState, piece_set::PieceSet, zobrist_hashing::ZobristHasher};
 
+#[derive(Clone)]
 pub struct Board {
     pub players: [PieceSet; 2],
     pub us: usize,
@@ -90,6 +91,10 @@ impl Board {
     #[inline(always)]
     pub fn get_occupancy(&self) -> u64 {
         self.occ
+    }
+
+    pub fn get_hash_stack(&self) -> &Vec<u64> {
+        &self.hash_stack
     }
 
     pub fn compute_occ_and_checkers(&mut self) {

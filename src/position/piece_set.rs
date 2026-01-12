@@ -1,5 +1,6 @@
 use crate::constants::*;
 
+#[derive(Clone)]
 pub struct PieceSet {
     pieces: [u64; 6],
     color: usize,

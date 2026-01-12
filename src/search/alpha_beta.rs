@@ -1,4 +1,3 @@
-use std::f32::consts::PI;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -6,7 +5,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use crate::evaluation::Evaluator;
-use crate::moving::move_generation::generate_moves;
+use crate::moving::move_generation::{generate_moves, get_mg};
 use crate::position::piece_set::PieceSet;
 use crate::search::history::HistoryTable;
 use crate::search::killers::KillerTable;
@@ -30,7 +29,7 @@ const NULL_MOVE_RED: i32 = 3;
 
 pub struct SearchResult {
     pub mv: Move,
-    pub nodes_searched: i32,
+    pub nodes_searched: u64,
     pub depth_reached: i32,
     pub ttable_hits: i32,
     pub nmp_hits: i32,
@@ -45,10 +44,11 @@ pub struct Searcher {
     evaluator: Evaluator,
     search_depth: i32,
     ttable_hits: i32,
-    nodes_searched: i32,
+    nodes_searched: u64,
     generation: i32,
     nmp_hits: i32,
     stop: Arc<AtomicBool>,
+    lmr_table: [[i32; 64]; 218]
 }
 
 impl Default for Searcher {
@@ -65,6 +65,7 @@ impl Default for Searcher {
             stop: Arc::new(AtomicBool::new(false)),
             history: HistoryTable::new(),
             killers: KillerTable::new(),
+            lmr_table: compute_lmr_table()
         }
     }
 }
@@ -84,6 +85,14 @@ impl Searcher {
         SearchResult { depth_reached: self.search_depth, mv, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits, nmp_hits: self.nmp_hits }
     }
 
+    pub fn search_flat(&mut self, board: &mut Board, depth: i32) -> SearchResult {
+        self.nodes_searched =0;
+        self.pv_table = PvTable::new(depth as usize);
+        self.make_search(board, depth);
+        let mv = self.pv_table.get_best(0);
+        SearchResult { depth_reached: self.search_depth, mv, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits, nmp_hits: self.nmp_hits }
+    }
+
     pub fn search_with_time(&mut self, board: &mut Board, wtime: u64, btime: u64, winc: u64, binc: u64) -> SearchResult {
         let (time, inc) = if board.us == WHITE {
             (wtime, winc)
@@ -91,8 +100,15 @@ impl Searcher {
             (btime, binc)
         };
 
-        let time = time / 50 + inc;
+        let time = time / 20 + inc / 2;
         self.search_to_time(board, time, true)
+    }
+
+    pub fn prepare_search(&mut self, stop: Arc<AtomicBool>) {
+        self.stop = stop;
+        self.nodes_searched = 0;
+        self.pv_table = PvTable::new(100);
+        self.stop.store(false, Ordering::Relaxed);
     }
 
     pub fn search_to_time(&mut self, board: &mut Board, time: u64, cut: bool) -> SearchResult {
@@ -141,7 +157,11 @@ impl Searcher {
         })
     }
 
-    fn make_search(&mut self, board: &mut Board, depth: i32) -> i32 {
+    pub fn get_best(&self) -> Move {
+        self.pv_table.get_best(0)
+    }
+
+    pub fn make_search(&mut self, board: &mut Board, depth: i32) -> i32 {
         self.generation += 1;
         self.search_depth = depth;
         self.ttable_hits = 0;
@@ -164,6 +184,11 @@ impl Searcher {
         if depth == self.search_depth {
             return self.quiesce_nega_max(board, depth, alpha, beta);
         }
+        if depth > 0 && self.is_repetition(board) {
+            return 0;
+        }
+
+        let org_alpha = alpha;
         let depth_left = self.search_depth - depth;
         self.nodes_searched += 1;
         let hash = board.get_hash();
@@ -203,22 +228,26 @@ impl Searcher {
         let mut ordered_moves = OrderedMovesIter::new(hash_move, depth);
         let mut best_score = i32::MIN;
         let mut best_move = Move::null();
+        let mut move_num = 0;
 
-        let mut mv_num = 0;
         while let Some(mv) = ordered_moves.next(board, &self.history, &self.killers) {
-            let lmr = self.compute_lmr(board, &mv, mv_num, depth, depth_left);
-            if lmr > 0 {
-                board.make_move(&mv);
-                let lmr_score = -self.nega_max(board, depth + 1 + lmr, -beta, -alpha);
-                board.unmake_move(&mv);
-                if lmr_score < alpha { continue; }
-            }
-
             board.make_move(&mv);
-            let score = -self.nega_max(board, depth + 1, -beta, -alpha);
+            let lmr = self.can_reduce(board, depth_left, depth, &mv, move_num);
+            let score = if lmr > 0 {
+                let temp_score = -self.nega_max(board, depth + 1 + lmr, -beta, -alpha);
+                if temp_score > alpha {
+                    -self.nega_max(board, depth + 1, -beta, -alpha)
+                } else {
+                    temp_score
+                }
+            } else {
+                    -self.nega_max(board, depth + 1, -beta, -alpha)
+            };
+            
             board.unmake_move(&mv);
 
-            self.history.add(&mv, depth_left);
+            move_num += 1;
+
             if score > best_score {
                 best_score = score;
                 self.pv_table.update(depth as usize, mv);
@@ -227,9 +256,9 @@ impl Searcher {
             }
             if score >= beta {
                 self.killers.update(depth, mv);
+                self.history.add(&mv, depth_left);
             }
             if alpha >= beta { break } 
-            mv_num += 1;
         }
 
         //no moves
@@ -237,9 +266,9 @@ impl Searcher {
            return if board.is_check() { -MATE+depth } else { 0 }
         }
 
-       let tt_type = if best_score == alpha {TTEntryType::Lower}
-                                      else if best_score == beta {TTEntryType::Upper}
-                                      else {TTEntryType::Exact};
+       let tt_type = if best_score > org_alpha && best_score < beta {TTEntryType::Exact}
+                                      else if best_score >= beta {TTEntryType::Lower}
+                                      else {TTEntryType::Upper};
         self.store_tt(hash, best_score, depth_left, tt_type, best_move);
         best_score
     }
@@ -254,6 +283,12 @@ impl Searcher {
             best_move
         };
         self.ttable.store(entry);
+    }
+
+    fn is_repetition(&self, board: &Board) -> bool {
+        let hash = board.get_hash();
+        let hash_stack = board.get_hash_stack();
+        hash_stack.contains(&hash)
     }
 
     fn is_in_zugzwang(&self, pieces: &PieceSet) -> bool {
@@ -273,7 +308,7 @@ impl Searcher {
                 return 0;
             }
         }
-        let mut best_value = self.evaluator.evaluate(board);
+        let mut best_value = self.evaluator.evaluate(board, get_mg());
         if best_value >= beta {
             return best_value;
         }
@@ -299,19 +334,37 @@ impl Searcher {
         best_value
     }
 
-    pub fn get_nodes_searched(&self) -> i32 {
+    pub fn get_nodes_searched(&self) -> u64 {
         self.nodes_searched
     }
 
-    fn compute_lmr(&self, board: &Board, mv: &Move, move_num: i32, depth: i32, depth_left: i32) -> i32 {
-        if board.is_check() || self.killers.is_killer(depth, mv) || mv.is_capture() || mv.is_promotion() || depth_left <= 3 || move_num < 10 {
-            0
+    fn can_reduce(&self, board: &Board, depth_left: i32, depth: i32, mv: &Move, move_num: i32) -> i32 {
+        if depth_left > 3 && !mv.is_non_quiet() &&  move_num > 3 && !self.killers.is_killer(depth, mv) && board.get_checkers() == 0 {
+            let red_depth = self.lmr_table[move_num as usize][depth_left as usize];
+            std::cmp::min(red_depth, depth_left - 1)
         } else {
-            let depth_left_f = depth_left as f32;
-            let move_num_f = move_num as f32;
-            let red = 0.99 + depth_left_f.ln() * move_num_f.ln() / PI;
-            let red_i = red as i32;
-            red_i.min(depth_left)
+            0
         }
     }
+}
+
+fn compute_lmr_table() -> [[i32; 64]; 218] {
+    let mut depth = 0;
+    let mut lmr_arr = [[0; 64]; 218];
+    loop {
+        if depth >= 64 {
+            break;
+        }
+        let mut mv_num = 0;
+        loop {
+            if mv_num >= 218 {
+                break;
+            }
+            let lmr_depth = 0.99 + (depth as f64).ln() * (mv_num as f64).ln() / 3.14;
+            lmr_arr[mv_num][depth] = lmr_depth as i32;
+            mv_num += 1;
+        }
+        depth += 1;
+    }
+    lmr_arr
 }
