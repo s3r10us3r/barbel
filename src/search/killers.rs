@@ -14,7 +14,8 @@ impl KillerTable {
     }
 
     pub fn update(&mut self, ply: i32, mv: Move) {
-        let ply = ply as usize;
+        let ply = std::cmp::min(ply as usize, MAX_PLY - 1);
+
         if self.table[ply][0].is_null() {
             self.table[ply][1] = self.table[ply][0];
         }
@@ -23,6 +24,6 @@ impl KillerTable {
 
     pub fn is_killer(&self, ply: i32, mv: &Move) -> bool {
         let ply = ply as usize;
-        self.table[ply][0] == *mv || self.table[ply][1] == *mv
+        ply < MAX_PLY && (self.table[ply][0] == *mv || self.table[ply][1] == *mv)
     }
 }

@@ -160,10 +160,11 @@ impl Engine {
                     let handle = s.spawn(move || {
                         let mut nodes_searched = 0;
                         let mut depth= 1;
+                        let mut score = 0;
                         while !limit.soft_stop(nodes_searched, depth, start.elapsed().as_millis()) 
-                        && !stop2.load(std::sync::atomic::Ordering::Relaxed) 
+                        && !stop2.load(std::sync::atomic::Ordering::Relaxed) && score < 900_000
                         {
-                            searcher.make_search(&mut board, depth);
+                            score = searcher.make_search(&mut board, depth);
                             if !stop2.load(Ordering::Relaxed) {
                                 best_mv = searcher.get_best();
                                 depth += 1;

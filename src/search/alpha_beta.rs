@@ -12,7 +12,7 @@ use crate::search::killers::KillerTable;
 use crate::search::move_ordering::{OrderedMovesIter, QuiesceOrderedMovesIter};
 use crate::search::transposition::TTEntryType;
 use crate::{
-    position::board::Board, constants::WHITE, 
+    position::board::Board, 
     moving::mv::Move
 };
 
@@ -75,6 +75,7 @@ impl Searcher {
         Self::default()
     }
 
+    //test exclusive
     pub fn search_to_depth(&mut self, board: &mut Board, depth: i32) -> SearchResult {
         self.nodes_searched = 0;
         self.pv_table = PvTable::new(depth as usize);
@@ -85,6 +86,7 @@ impl Searcher {
         SearchResult { depth_reached: self.search_depth, mv, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits, nmp_hits: self.nmp_hits }
     }
 
+    //test exclusive
     pub fn search_flat(&mut self, board: &mut Board, depth: i32) -> SearchResult {
         self.nodes_searched =0;
         self.pv_table = PvTable::new(depth as usize);
@@ -93,16 +95,6 @@ impl Searcher {
         SearchResult { depth_reached: self.search_depth, mv, nodes_searched: self.nodes_searched, ttable_hits: self.ttable_hits, nmp_hits: self.nmp_hits }
     }
 
-    pub fn search_with_time(&mut self, board: &mut Board, wtime: u64, btime: u64, winc: u64, binc: u64) -> SearchResult {
-        let (time, inc) = if board.us == WHITE {
-            (wtime, winc)
-        } else {
-            (btime, binc)
-        };
-
-        let time = time / 20 + inc / 2;
-        self.search_to_time(board, time, true)
-    }
 
     pub fn prepare_search(&mut self, stop: Arc<AtomicBool>) {
         self.stop = stop;
@@ -111,6 +103,7 @@ impl Searcher {
         self.stop.store(false, Ordering::Relaxed);
     }
 
+    //test exclusive
     pub fn search_to_time(&mut self, board: &mut Board, time: u64, cut: bool) -> SearchResult {
         self.nodes_searched = 0;
         self.pv_table = PvTable::new(100);
@@ -177,7 +170,7 @@ impl Searcher {
         best_value
     }
 
-    pub fn nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
+    fn nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop.load(Ordering::Relaxed) {
             return alpha;
         }
@@ -295,7 +288,7 @@ impl Searcher {
         pieces.get_orthogonals() | pieces.get_diagonals() | pieces.get_knights() == 0
     }
 
-    pub fn quiesce_nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
+    fn quiesce_nega_max(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         if self.stop.load(Ordering::Relaxed) {
             return alpha;
         }
@@ -340,7 +333,8 @@ impl Searcher {
 
     fn can_reduce(&self, board: &Board, depth_left: i32, depth: i32, mv: &Move, move_num: i32) -> i32 {
         if depth_left > 3 && !mv.is_non_quiet() &&  move_num > 3 && !self.killers.is_killer(depth, mv) && board.get_checkers() == 0 {
-            let red_depth = self.lmr_table[move_num as usize][depth_left as usize];
+            let depth_capped = std::cmp::min(depth_left, 63) as usize;
+            let red_depth = self.lmr_table[move_num as usize][depth_capped];
             std::cmp::min(red_depth, depth_left - 1)
         } else {
             0

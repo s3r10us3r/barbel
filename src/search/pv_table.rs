@@ -51,6 +51,7 @@ impl PvTable {
     }
 
     fn index(&self, ply: usize, col: usize) -> usize {
-        ply * (2 * self.n - ply + 1) / 2 + col
+        let idx = ply * (2 * self.n - ply + 1) / 2 + col;
+        idx.min(self.table.len() - 1)
     }
 }
