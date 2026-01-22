@@ -1,13 +1,11 @@
-use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::{i32, thread};
+use std::{f64, thread};
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use crate::evaluation::Evaluator;
 use crate::moving::move_generation::{generate_moves, get_mg};
-use crate::moving::mv;
 use crate::position::piece_set::PieceSet;
 use crate::search::history::HistoryTable;
 use crate::search::killers::KillerTable;
@@ -19,7 +17,6 @@ use crate::{
 };
 
 use super::{
-    pv_table::PvTable,
     transposition::{Entry, TTable},
 };
 
@@ -175,7 +172,7 @@ impl Searcher {
         if !self.stop.load(Ordering::Relaxed) {
             // let mut visited = vec![board.get_hash()];
             // let pv_string = self.get_pv_string(board, String::new(), &best_move, &mut visited);
-            let pv_string = self.get_pv_string_it(board, &best_move);
+            let pv_string = self.get_pv_string(board, &best_move);
             println!(
                 "info depth {} cp {} tthits {} nodes searched {} nmp hits {} pv {}",
                 depth, best_value, self.ttable_hits, self.nodes_searched, self.nmp_hits, pv_string
@@ -184,21 +181,7 @@ impl Searcher {
         (best_value, best_move)
     }
 
-    fn get_pv_string(&mut self, board: &mut Board, mut s: String, mv: &Move, visited: &mut Vec<u64>) -> String {
-        s += (mv.to_str() + " ").as_str();
-        board.make_move(mv);
-        let hash = board.get_hash();
-        if !visited.contains(&hash) {
-            let tt_entry = self.ttable.probe(hash);
-            if let Some(entry) = tt_entry {
-                s = self.get_pv_string(board, s, &entry.best_move, visited);
-            }
-        }
-        board.unmake_move(mv);
-        s
-    }
-
-    fn get_pv_string_it(&mut self, board: &mut Board, best_mv: &Move) -> String {
+    fn get_pv_string(&mut self, board: &mut Board, best_mv: &Move) -> String {
         let mut visited = vec![];
         let mut mv_stack = vec![*best_mv];
         let mut s = best_mv.to_str() + " ";
@@ -408,7 +391,7 @@ fn compute_lmr_table() -> [[i32; 64]; 218] {
             if mv_num >= 218 {
                 break;
             }
-            let lmr_depth = 0.99 + (depth as f64).ln() * (mv_num as f64).ln() / 3.14;
+            let lmr_depth = 0.99 + (depth as f64).ln() * (mv_num as f64).ln() / f64::consts::PI;
             lmr_arr[mv_num][depth] = lmr_depth as i32;
             mv_num += 1;
         }
