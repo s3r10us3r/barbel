@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use crate::evaluation::Evaluator;
 use crate::moving::move_generation::{generate_moves, get_mg};
+use crate::moving::mv;
 use crate::position::piece_set::PieceSet;
 use crate::search::history::HistoryTable;
 use crate::search::killers::KillerTable;
@@ -172,7 +173,9 @@ impl Searcher {
         
 
         if !self.stop.load(Ordering::Relaxed) {
-            let pv_string = self.get_pv_string(board, String::new(), &best_move);
+            // let mut visited = vec![board.get_hash()];
+            // let pv_string = self.get_pv_string(board, String::new(), &best_move, &mut visited);
+            let pv_string = self.get_pv_string_it(board, &best_move);
             println!(
                 "info depth {} cp {} tthits {} nodes searched {} nmp hits {} pv {}",
                 depth, best_value, self.ttable_hits, self.nodes_searched, self.nmp_hits, pv_string
@@ -181,14 +184,44 @@ impl Searcher {
         (best_value, best_move)
     }
 
-    fn get_pv_string(&mut self, board: &mut Board, mut s: String, mv: &Move) -> String {
+    fn get_pv_string(&mut self, board: &mut Board, mut s: String, mv: &Move, visited: &mut Vec<u64>) -> String {
         s += (mv.to_str() + " ").as_str();
         board.make_move(mv);
-        let tt_entry = self.ttable.probe(board.get_hash());
-        if let Some(entry) = tt_entry {
-            s = self.get_pv_string(board, s, &entry.best_move);
+        let hash = board.get_hash();
+        if !visited.contains(&hash) {
+            let tt_entry = self.ttable.probe(hash);
+            if let Some(entry) = tt_entry {
+                s = self.get_pv_string(board, s, &entry.best_move, visited);
+            }
         }
         board.unmake_move(mv);
+        s
+    }
+
+    fn get_pv_string_it(&mut self, board: &mut Board, best_mv: &Move) -> String {
+        let mut visited = vec![];
+        let mut mv_stack = vec![*best_mv];
+        let mut s = best_mv.to_str() + " ";
+        board.make_move(best_mv);
+
+        loop {
+            let hash = board.get_hash();
+            let tt_entry = self.ttable.probe(hash);
+            if tt_entry.is_none() || visited.contains(&hash) {
+                break;
+            }
+
+            let mv = tt_entry.unwrap().best_move;
+            s += (mv.to_str() + " ").as_str();
+            board.make_move(&mv);
+            mv_stack.push(mv);
+            visited.push(hash);
+        }
+
+        while let Some(m) = mv_stack.pop() {
+            board.unmake_move(&m);
+        }
+
         s
     }
 

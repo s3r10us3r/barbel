@@ -15,9 +15,9 @@ use crate::search::alpha_beta::Searcher;
 pub struct Engine {
     board: Board,
     mvs: MoveList,
-    searcher: Option<Searcher>,
+    searcher: Option<Box<Searcher>>,
     stop: Arc<AtomicBool>,
-    thread: Option<JoinHandle<Searcher>>
+    thread: Option<JoinHandle<Box<Searcher>>>
 }
 
 impl Default for Engine {
@@ -25,7 +25,7 @@ impl Default for Engine {
         Engine {
             board: Board::new(ZobristHasher::new()),
             mvs: MoveList::new(),
-            searcher: Some(Searcher::new()),
+            searcher: Some(Box::new(Searcher::new())),
             stop: Arc::new(AtomicBool::new(false)),
             thread: None
         }
@@ -157,9 +157,7 @@ impl Engine {
                     let start = Instant::now();
                     let stop = stop.clone();
                     let stop2 = stop.clone();
-                    eprintln!("THIS RUNS");
                     let handle = s.spawn(move || {
-                        eprintln!("THIS RUNS 1");
                         let mut nodes_searched = 0;
                         let mut depth= 1;
                         let mut score = 0;
@@ -176,7 +174,6 @@ impl Engine {
                         }
                         (searcher, best_mv)
                     });
-                    eprintln!("THIS RUNS 2");
                     while !limit.hard_stop(start.elapsed().as_millis()) && !stop.load(Ordering::Relaxed) && !handle.is_finished() {
                         sleep(Duration::from_millis(2));
                     }

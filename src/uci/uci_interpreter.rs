@@ -49,8 +49,6 @@ impl UciController {
     }
 
     fn exec_command(&mut self, command: String ) {
-
-        eprintln!("{}", command);
         self.parsed_command = Some(command);
         let token = self.pop_token();
         if let Some(t) = token {
