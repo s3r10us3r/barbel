@@ -49,6 +49,8 @@ impl UciController {
     }
 
     fn exec_command(&mut self, command: String ) {
+
+        eprintln!("{}", command);
         self.parsed_command = Some(command);
         let token = self.pop_token();
         if let Some(t) = token {
@@ -182,10 +184,9 @@ impl UciController {
                     "binc" => binc = num,
                     _ => {}
                 }
-            } else {
-                panic!("Invalid args")
             }
         }
+        println!("{} {} {} {}", wtime, btime, winc, binc);
         self.engine.search_with_time(wtime, btime, winc, binc);
     }
 

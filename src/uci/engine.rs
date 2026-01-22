@@ -157,22 +157,26 @@ impl Engine {
                     let start = Instant::now();
                     let stop = stop.clone();
                     let stop2 = stop.clone();
+                    eprintln!("THIS RUNS");
                     let handle = s.spawn(move || {
+                        eprintln!("THIS RUNS 1");
                         let mut nodes_searched = 0;
                         let mut depth= 1;
                         let mut score = 0;
                         while !limit.soft_stop(nodes_searched, depth, start.elapsed().as_millis()) 
                         && !stop2.load(std::sync::atomic::Ordering::Relaxed) && score < 900_000
                         {
-                            score = searcher.make_search(&mut board, depth);
+                            let (ts, tm) = searcher.make_search(&mut board, depth);
                             if !stop2.load(Ordering::Relaxed) {
-                                best_mv = searcher.get_best();
+                                score = ts;
+                                best_mv = tm;
                                 depth += 1;
                                 nodes_searched += searcher.get_nodes_searched();
                             }
                         }
                         (searcher, best_mv)
                     });
+                    eprintln!("THIS RUNS 2");
                     while !limit.hard_stop(start.elapsed().as_millis()) && !stop.load(Ordering::Relaxed) && !handle.is_finished() {
                         sleep(Duration::from_millis(2));
                     }
